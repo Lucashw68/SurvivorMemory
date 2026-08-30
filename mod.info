@@ -1,0 +1,7 @@
+name=Survivor Memory
+id=SurvivorMemory
+description=Your character doesn't know everything. They remember what they've seen.
+author=Survivor Memory contributors
+category=ui
+modversion=1.1.0
+versionMin=42.0.0

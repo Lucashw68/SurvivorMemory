@@ -1,0 +1,5 @@
+require "SurvivorMemory/Runtime"
+require "SurvivorMemory/MemoryDebugPanel"
+require "SurvivorMemory/MemoryPanel"
+require "SurvivorMemory/MemoryStatusIndicator"
+require "SurvivorMemory/WorldMapOverlay"
