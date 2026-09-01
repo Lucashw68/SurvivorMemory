@@ -13,11 +13,11 @@ commande de partage. Un durcissement serveur (validation/rate limiting de
 commandes dédiées) pourra être ajouté si le mod devient compétitif, mais le MVP
 n'accorde aucun avantage à distance et n'envoie aucun contenu d'item.
 
-## Format v1
+## Format v5
 
 ```lua
 SurvivorMemory = {
-    schemaVersion = 1,
+    schemaVersion = 5,
     buildings = {
         [buildingKey] = {
             buildingKey = "b1:...",
@@ -32,6 +32,33 @@ SurvivorMemory = {
             centerY = 206,
             identityVersion = 1,
             nativeIdObserved = "...",
+            placeDesignation = "HOME", -- NONE, HOME ou OUTPOST
+            emotionalMemory = {
+                observedAt = 240.0,
+                lastReactionAt = 264.0,
+                safeReturns = 0,
+            },
+        },
+    },
+    importantMemories = {
+        ["important:v1:GENERATOR:building:b1:..."] = {
+            kind = "GENERATOR",
+            placeKey = "building:b1:...",
+            buildingKey = "b1:...",
+            x = 105, y = 206, z = 0,
+            observedAt = 120.0,
+        },
+    },
+    vehicleMemories = {
+        ["vehicle:sql:81"] = {
+            vehicleKey = "vehicle:sql:81",
+            identityKind = "SQL",
+            sqlId = 81,
+            mechanicalId = 12004,
+            scriptName = "Base.CarNormal",
+            displayName = "Chevalier Dart",
+            x = 350, y = 451, z = 0,
+            observedAt = 525.0,
         },
     },
     debug = {},
@@ -39,16 +66,33 @@ SurvivorMemory = {
 ```
 
 Seuls nombres, chaînes, booléens et tables sont stockés. Les migrations passent
-par `MemoryStore.migrate`; une version future doit ajouter une étape v1→v2 puis
-incrémenter `SCHEMA_VERSION`. Une version inconnue est rejetée par `migrate`;
-`forModData` enregistre `SurvivorMemoryRecovery` puis repart sur un store v1
+par `MemoryStore.migrate`. La migration v1→v2 ajoute implicitement la
+désignation personnelle `NONE`; elle ne modifie ni les observations ni le
+statut d'exploration. La migration v2→v3 accepte le champ émotionnel optionnel;
+une entrée absente reste absente et une entrée corrompue est supprimée. La
+migration v3→v4 ajoute `importantMemories`; une observation invalide est
+supprimée sans affecter les bâtiments. La migration v4→v5 ajoute
+`vehicleMemories`; une entrée incomplète ou ambiguë est écartée. Une
+version inconnue est rejetée par `migrate`; `forModData` enregistre
+`SurvivorMemoryRecovery` puis repart sur un store v5
 vide afin de ne pas bloquer le chargement du personnage.
 
-## Extension Item Memory
+`placeDesignation` est manuel, personnel au personnage et limité à `NONE`,
+`HOME` ou `OUTPOST`. Une valeur absente ou corrompue est ramenée à `NONE`.
+`emotionalMemory` reste optionnel et ne contient ni score affiché, ni état
+mondial, ni référence Java.
 
-Le découplage des identités et du store permet d'ajouter plus tard une table
-`itemObservations` contenant `itemType`, `itemDisplayName`, `quantityObserved`,
-`containerIdentity`, `buildingIdentity` et `observedAt`. Elle devra être remplie
-uniquement au moment où le container est affiché localement. Une observation
-restera volontairement obsolète jusqu'à une nouvelle inspection; aucun scan à
-distance ne sera introduit.
+`importantMemories` contient uniquement catégorie, lieu, coordonnées
+représentatives et date in-game de dernière observation. Il ne contient aucun
+état actuel distant, quantité de carburant ou contenu de container.
+
+`vehicleMemories` conserve la dernière observation significative, jamais la
+position courante distante. Le SQL ID B42 est préféré; le couple script +
+mechanical ID sert uniquement de fallback et est promu sans doublon lorsqu'un
+SQL ID devient disponible.
+
+## Extensions futures
+
+Les futures extensions restent soumises à la doctrine non omnisciente. Elles ne
+doivent jamais reconstruire une connaissance distante actuelle à partir de
+l'état du moteur.

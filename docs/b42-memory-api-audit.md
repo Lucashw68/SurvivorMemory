@@ -96,8 +96,9 @@ fichier personnage en solo et reste propre au personnage. En client MP,
 implicitement les souvenirs.
 
 Les tables Lua sérialisables sont supportées; références Java, fonctions et
-metatables ne sont jamais persistées. Le format a `schemaVersion = 1` et une
-fonction de migration centrale.
+metatables ne sont jamais persistées. Le format courant a `schemaVersion = 5`
+et une fonction de migration centrale. La v2 ajoute la désignation personnelle;
+la v3 ajoute le souvenir émotionnel optionnel.
 
 ## World Map
 
@@ -116,6 +117,13 @@ Décision MVP+1: overlay de rendu `ISWorldMap` validé en B42.20.4. Il projette
 uniquement les centres des mémoires du personnage, sans appeler l'API markers
 ou symbols et sans modifier les annotations persistantes. Un cache indexé par
 la révision du store évite de reconstruire la liste à chaque frame.
+
+Les marqueurs `HOME` et `OUTPOST` utilisent leurs textures propres et des
+facteurs de rendu respectifs de 130 % et 165 %. Le clic droit effectue son
+hit-test uniquement sur les mémoires déjà affichées et propose `HOME`,
+`OUTPOST` ou `NONE`; il ne crée aucun symbole vanilla. La capture réelle de
+référence se trouve dans
+`research/screenshots/localization-preflight/survivor-memory-world-map-fr.png`.
 
 ## Performance et instrumentation
 

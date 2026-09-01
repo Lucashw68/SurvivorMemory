@@ -1,5 +1,6 @@
 /dist/
 /tests/results/
+/research/
 # Les anciennes versions de PzModTools peuvent recréer ce chemin après un smoke MP.
 /test-results/
 *.log
