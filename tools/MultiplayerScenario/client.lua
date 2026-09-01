@@ -127,6 +127,28 @@ function Scenario.onTick()
             if Scenario.fixture.container then
                 SurvivorMemory.Runtime.inspectContainer({ player = 0 }, Scenario.fixture.container)
             end
+            if not SurvivorMemory.Runtime.setCurrentPlaceDesignation(0,
+                    SurvivorMemory.PlaceDesignation.OUTPOST) then
+                finish("FAIL", "outpost-designation-failed") return
+            end
+            SurvivorMemory.EmotionalMemory.remember(memory, getGameTime():getWorldAgeHours())
+            SurvivorMemory.ImportantMemory.observe(root,
+                SurvivorMemory.ImportantMemory.Kind.GENERATOR, {
+                    buildingKey = memory.buildingKey,
+                    x = Scenario.fixture.room:getX(),
+                    y = Scenario.fixture.room:getY(),
+                    z = Scenario.fixture.room:getZ(),
+                }, getGameTime():getWorldAgeHours())
+            SurvivorMemory.VehicleMemory.observe(root, {
+                sqlId = 7001,
+                mechanicalId = 8101,
+                scriptName = "Base.CarNormal",
+                displayName = "Chevalier Dart",
+                x = Scenario.fixture.outside:getX(),
+                y = Scenario.fixture.outside:getY(),
+                z = Scenario.fixture.outside:getZ(),
+            }, getGameTime():getWorldAgeHours())
+            player:transmitModData()
             local stats = SurvivorMemory.MemoryStore.stats(root, memory)
             if stats.roomsKnown < 1 then finish("FAIL", "room-not-observed") return end
             if Scenario.fixture.container and stats.containersInspected < 1 then
@@ -135,6 +157,11 @@ function Scenario.onTick()
             RunContext.signal("observation-complete", "runtime-memory-created")
             finish("PASS", "identity=" .. tostring(player:getUsername())
                 .. " building=" .. memory.buildingKey
+                .. " designation=" .. tostring(memory.placeDesignation)
+                .. " emotional=" .. tostring(memory.emotionalMemory ~= nil)
+                .. " important=" .. tostring(#SurvivorMemory.ImportantMemory.forBuilding(
+                    root, memory.buildingKey))
+                .. " vehicles=" .. tostring(#SurvivorMemory.VehicleMemory.all(root))
                 .. " rooms=" .. tostring(stats.roomsKnown)
                 .. " inspected=" .. tostring(stats.containersInspected))
         elseif Scenario.phase == "WAIT_A" and RunContext.readSignal("from-client-a-observation-complete") then
@@ -143,12 +170,16 @@ function Scenario.onTick()
             local root = SurvivorMemory.MemoryStore.forModData(player:getModData())
             local absent = root.buildings[Scenario.fixture.buildingKey] == nil
             local total = count(root.buildings)
-            if not absent or total ~= 0 then
-                finish("FAIL", "memory-leaked absent=" .. tostring(absent) .. " buildings=" .. tostring(total))
+            local importantTotal = count(root.importantMemories)
+            local vehicleTotal = count(root.vehicleMemories)
+            if not absent or total ~= 0 or importantTotal ~= 0 or vehicleTotal ~= 0 then
+                finish("FAIL", "memory-leaked absent=" .. tostring(absent)
+                    .. " buildings=" .. tostring(total) .. " important=" .. tostring(importantTotal)
+                    .. " vehicles=" .. tostring(vehicleTotal))
                 return
             end
             finish("PASS", "identity=" .. tostring(player:getUsername())
-                .. " foreign-memory-absent=true buildings=0")
+                .. " foreign-memory-absent=true buildings=0 important=0 vehicles=0")
         end
 
         if Scenario.ticks > 10800 then finish("FAIL", "scenario-timeout phase=" .. Scenario.phase) end

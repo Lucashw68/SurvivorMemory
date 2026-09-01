@@ -1,7 +1,11 @@
 require "ISUI/ISPanel"
+require "ISUI/ISContextMenu"
 require "SurvivorMemory/UICompat"
 require "SurvivorMemory/Runtime"
 require "SurvivorMemory/LocationName"
+require "SurvivorMemory/PlaceDesignation"
+require "SurvivorMemory/ImportantMemory"
+require "SurvivorMemory/ModOptions"
 
 SurvivorMemory = SurvivorMemory or {}
 SurvivorMemory.MemoryPanel = SurvivorMemory.UICompat.WindowBase:derive("SurvivorMemoryPanel")
@@ -11,6 +15,9 @@ local MemoryStore = SurvivorMemory.MemoryStore
 local TimeFormat = SurvivorMemory.TimeFormat
 local LocationName = SurvivorMemory.LocationName
 local UICompat = SurvivorMemory.UICompat
+local PlaceDesignation = SurvivorMemory.PlaceDesignation
+local ImportantMemory = SurvivorMemory.ImportantMemory
+local ModOptions = SurvivorMemory.ModOptions
 local panels = {}
 
 local function texture(path)
@@ -103,15 +110,39 @@ function MemoryPanel:render()
 
     y = self:drawSection(getText("IGUI_SM_SectionLocation"), y)
     y = self:drawLine(LocationName.text(memory), y)
+    if ModOptions.enabled("places") then
+        y = self:drawLine(getText("IGUI_SM_PlaceDesignation",
+            getText("IGUI_SM_Place_" .. PlaceDesignation.normalize(memory.placeDesignation))), y)
+    end
+    if ModOptions.enabled("emotionalMemory") and memory.emotionalMemory then
+        y = self:drawLine(getText("IGUI_SM_EmotionalMemory"), y, 0.88, 0.70, 0.58)
+    end
 
     y = self:drawSection(getText("IGUI_SM_SectionVisits"), y)
     y = self:drawLine(getText("IGUI_SM_VisitedTimes", memory.visitCount), y)
     y = self:drawLine(getText("IGUI_SM_FirstVisitedRelative", TimeFormat.age(now, memory.firstVisited)), y)
     y = self:drawLine(getText("IGUI_SM_LastVisitedRelative", TimeFormat.age(now, memory.lastVisited)), y)
 
-    y = self:drawSection(getText("IGUI_SM_SectionExploration"), y)
-    y = self:drawLine(getText("IGUI_SM_RoomsRemembered", stats.roomsKnown), y)
-    y = self:drawLine(getText("IGUI_SM_ContainersRemembered", stats.containersInspected), y)
+    if ModOptions.enabled("rooms") or ModOptions.enabled("containers") then
+        y = self:drawSection(getText("IGUI_SM_SectionExploration"), y)
+        if ModOptions.enabled("rooms") then
+            y = self:drawLine(getText("IGUI_SM_RoomsRemembered", stats.roomsKnown), y)
+        end
+        if ModOptions.enabled("containers") then
+            y = self:drawLine(getText("IGUI_SM_ContainersRemembered", stats.containersInspected), y)
+        end
+    end
+
+    local _, root = SurvivorMemory.Runtime.currentMemory(self.playerNum)
+    local important = ImportantMemory.forBuilding(root, memory.buildingKey)
+    if ModOptions.enabled("importantMemory") and #important > 0 then
+        y = self:drawSection(getText("IGUI_SM_SectionImportantMemories"), y)
+        for _, observation in ipairs(important) do
+            y = self:drawLine(getText("IGUI_SM_ImportantLastSeen",
+                getText("IGUI_SM_Important_" .. observation.kind),
+                TimeFormat.age(now, observation.observedAt)), y, 0.88, 0.78, 0.55)
+        end
+    end
 
     y = self:drawSection(getText("IGUI_SM_SectionStatus"), y)
     local statusText = getText("IGUI_SM_Status_" .. memory.status)
@@ -123,7 +154,7 @@ function MemoryPanel:new(playerNum)
     local medium = getTextManager():getFontHeight(UIFont.Medium)
     local scale = math.max(1, small / 14)
     local width = math.floor(380 * scale)
-    local height = math.floor(300 * scale)
+    local height = math.floor(400 * scale)
     width = math.min(width, math.floor(getPlayerScreenWidth(playerNum) * 0.90))
     height = math.min(height, math.floor(getPlayerScreenHeight(playerNum) * 0.90))
     local x = getPlayerScreenLeft(playerNum) + math.floor((getPlayerScreenWidth(playerNum) - width) / 2)
@@ -152,6 +183,7 @@ end
 
 function MemoryPanel.open(playerNum)
     playerNum = playerNum or 0
+    if not ModOptions.enabled("buildingMemory") then return end
     if panels[playerNum] then
         panels[playerNum]:close()
         return
@@ -173,11 +205,45 @@ function MemoryPanel.onWorldContextMenu(playerNum, context, worldObjects, test)
     if not memory then return end
     if test then return ISWorldObjectContextMenu.setTest() end
     context:addOption(getText("IGUI_SM_RememberAction"), playerNum, MemoryPanel.open)
+    if ModOptions.enabled("placeDesignations") then
+        local designationOption = context:addOption(getText("IGUI_SM_PlaceAction"))
+        local designationMenu = ISContextMenu:getNew(context)
+        context:addSubMenu(designationOption, designationMenu)
+        local current = PlaceDesignation.normalize(memory.placeDesignation)
+        for _, designation in ipairs({ PlaceDesignation.HOME, PlaceDesignation.OUTPOST, PlaceDesignation.NONE }) do
+            local option = designationMenu:addOption(getText("IGUI_SM_Place_" .. designation),
+                playerNum, SurvivorMemory.Runtime.setCurrentPlaceDesignation, designation)
+            designationMenu:setOptionChecked(option, current == designation)
+        end
+    end
     if isDebugEnabled() and SurvivorMemory.MemoryDebugPanel then
         context:addOption(getText("IGUI_SM_DebugAction"), playerNum, SurvivorMemory.MemoryDebugPanel.open)
     end
 end
 
+local function firstLocalPlayerNum()
+    for playerNum = 0, 3 do
+        local player = getSpecificPlayer(playerNum)
+        if player and player:isLocalPlayer() then return playerNum end
+    end
+    return 0
+end
+
+function MemoryPanel.onKeyStartPressed(key)
+    if MainOptions and MainOptions.setKeybindDialog then return end
+    local configured = tonumber(ModOptions.value("recallPanelKey")) or 0
+    if configured > 0 and key == configured then MemoryPanel.open(firstLocalPlayerNum()) end
+end
+
+function MemoryPanel.applyOptions()
+    if ModOptions.enabled("buildingMemory") then return end
+    local openPanels = {}
+    for _, panel in pairs(panels) do table.insert(openPanels, panel) end
+    for _, panel in ipairs(openPanels) do panel:close() end
+end
+
 Events.OnFillWorldObjectContextMenu.Add(MemoryPanel.onWorldContextMenu)
+Events.OnKeyStartPressed.Add(MemoryPanel.onKeyStartPressed)
+ModOptions.addListener(MemoryPanel.applyOptions)
 
 return MemoryPanel

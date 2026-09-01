@@ -1,7 +1,9 @@
 name=Survivor Memory
 id=SurvivorMemory
+poster=poster.png
+icon=icon.png
 description=Persistent, character-owned memory of buildings actually explored.
 author=Survivor Memory contributors
 category=ui
-modversion=1.1.0
+modversion=1.6.0
 versionMin=42.0.0

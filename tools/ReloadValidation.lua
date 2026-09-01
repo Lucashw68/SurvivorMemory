@@ -41,13 +41,32 @@ local function validateReload()
         if not condition then table.insert(failures, name) end
         log("CHECK " .. (condition and "PASS" or "FAIL") .. " name=" .. name)
     end
-    check(root and root.schemaVersion == 1, "schema_v1")
+    check(root and root.schemaVersion == 5, "schema_v5")
     check(buildingCount == 1, "one_building")
     check(memory and memory.visitCount == 2, "visit_count_preserved")
     check(memory and SurvivorMemory.MemoryStore.stats(nil, memory).roomsKnown == 2, "rooms_preserved")
     check(memory and SurvivorMemory.MemoryStore.stats(nil, memory).containersInspected == 2, "containers_preserved")
     check(memory and memory.firstVisited < memory.lastVisited, "timestamps_preserved")
     check(memory and memory.status == SurvivorMemory.MemoryStore.Status.PARTIALLY_SEARCHED, "status_preserved")
+    check(memory and memory.placeDesignation == SurvivorMemory.PlaceDesignation.HOME, "home_designation_preserved")
+    check(memory and memory.emotionalMemory and memory.emotionalMemory.observedAt ~= nil,
+        "emotional_memory_preserved")
+    check(memory and memory.emotionalMemory and memory.emotionalMemory.lastReactionAt ~= nil,
+        "emotional_reaction_timestamp_preserved")
+    local important = root and SurvivorMemory.ImportantMemory
+        and SurvivorMemory.ImportantMemory.forBuilding(root, memory and memory.buildingKey) or {}
+    check(#important == 1 and important[1].kind == "GENERATOR",
+        "important_generator_preserved")
+    local outdoorImportant = root and SurvivorMemory.ImportantMemory
+        and SurvivorMemory.ImportantMemory.outdoor(root) or {}
+    local outdoorKinds = {}
+    for _, observation in ipairs(outdoorImportant) do outdoorKinds[observation.kind] = true end
+    check(#outdoorImportant == 2 and outdoorKinds.GENERATOR and outdoorKinds.GAS_PUMP,
+        "important_outdoor_objects_preserved")
+    local vehicles = root and SurvivorMemory.VehicleMemory
+        and SurvivorMemory.VehicleMemory.all(root) or {}
+    check(#vehicles == 1 and vehicles[1].vehicleKey ~= nil,
+        "vehicle_last_seen_memory_preserved")
     log("RESULT status=" .. (#failures == 0 and "PASS" or "FAIL") .. " failures=" .. table.concat(failures, ","))
     getCore():quitToDesktop()
 end

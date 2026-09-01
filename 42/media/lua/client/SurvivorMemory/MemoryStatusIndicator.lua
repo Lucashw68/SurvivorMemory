@@ -4,6 +4,8 @@ require "SurvivorMemory/MemoryPanel"
 require "SurvivorMemory/LocationName"
 require "SurvivorMemory/StatusPresentation"
 require "SurvivorMemory/TimeFormat"
+require "SurvivorMemory/PlaceDesignation"
+require "SurvivorMemory/ModOptions"
 
 SurvivorMemory = SurvivorMemory or {}
 SurvivorMemory.MemoryStatusIndicator = SurvivorMemory.MemoryStatusIndicator or {}
@@ -13,6 +15,8 @@ local StatusPresentation = SurvivorMemory.StatusPresentation
 local LocationName = SurvivorMemory.LocationName
 local TimeFormat = SurvivorMemory.TimeFormat
 local UICompat = SurvivorMemory.UICompat
+local PlaceDesignation = SurvivorMemory.PlaceDesignation
+local ModOptions = SurvivorMemory.ModOptions
 local buttons = {}
 local TEXTURE_SIZES = { 32, 48, 64, 80, 96, 128 }
 local POSITION_REFRESH_MS = 250
@@ -93,6 +97,21 @@ local function updateTooltip(button)
         TimeFormat.age(TimeFormat.worldAgeHours(), memory.lastVisited)))
 end
 
+local function updatePresentation(button)
+    local memory = button.memory
+    if not memory then return end
+    local color = StatusPresentation.color(memory.status)
+    button:setActiveColor(color.r, color.g, color.b)
+    button.presentedStatus = memory.status
+    button.presentedDesignation = PlaceDesignation.normalize(memory.placeDesignation)
+    updateTooltip(button)
+    local visible = ModOptions.enabled("statusIndicator")
+    if visible and ModOptions.enabled("hideIndicatorInSearchedPlaces") then
+        visible = PlaceDesignation.shouldShowIndicator(memory.status, memory.placeDesignation)
+    end
+    button:setVisible(visible)
+end
+
 function MemoryStatusButton:ensureMoodleTextures()
     local size = self.width
     if self.moodleTextureSize == size then return end
@@ -129,6 +148,14 @@ end
 
 function MemoryStatusButton:update()
     ISButton.update(self)
+    -- Runtime notifications are the normal refresh path. This scalar check
+    -- keeps the UI coherent if persistence sanitization repairs the same
+    -- memory table without emitting a client event (for example when another
+    -- view accesses the store). It never scans buildings or containers.
+    if self.memory and (StatusPresentation.needsRefresh(self.presentedStatus, self.memory.status)
+            or self.presentedDesignation ~= PlaceDesignation.normalize(self.memory.placeDesignation)) then
+        updatePresentation(self)
+    end
     local now = getTimestampMs()
     if not self.nextPositionRefresh or now >= self.nextPositionRefresh then
         position(self)
@@ -152,7 +179,7 @@ local function ensureButton(playerNum)
         getTexture("media/ui/SurvivorMemory/memory-status.png"), Indicator, Indicator.onClick)
     button.playerNum = playerNum
     button:initialise()
-    button:setIconSizeRatio(0.62)
+    button:setIconSizeRatio(0.72)
     button:setActive(true)
     button:setVisible(false)
     button:addToUIManager()
@@ -163,23 +190,35 @@ end
 
 function Indicator.onMemoryEvent(eventName, player, memory)
     if not player then return end
-    local button = ensureButton(player:getPlayerNum())
-    if eventName == "exited" or not memory then
-        button:setVisible(false)
+    local playerNum = player:getPlayerNum()
+    local button = buttons[playerNum]
+    if not ModOptions.enabled("statusIndicator")
+            or eventName == "exited" or not memory then
+        if button then button:setVisible(false) end
         return
     end
-    local color = StatusPresentation.color(memory.status)
+    button = button or ensureButton(playerNum)
     button.memory = memory
-    button:setActiveColor(color.r, color.g, color.b)
-    updateTooltip(button)
+    updatePresentation(button)
     button.nextPositionRefresh = nil
-    button:setVisible(true)
+end
+
+function Indicator.applyOptions()
+    for _, button in pairs(buttons) do
+        if button.memory and ModOptions.enabled("statusIndicator") then
+            updatePresentation(button)
+        else
+            button:setVisible(false)
+        end
+    end
 end
 
 function Indicator.reset(playerNum)
     local button = buttons[playerNum]
     if button then
         button.memory = nil
+        button.presentedStatus = nil
+        button.presentedDesignation = nil
         button:setVisible(false)
         button:removeFromUIManager()
         buttons[playerNum] = nil
@@ -191,6 +230,7 @@ function Indicator.currentButton(playerNum)
 end
 
 SurvivorMemory.Runtime.addListener(Indicator.onMemoryEvent)
+ModOptions.addListener(Indicator.applyOptions)
 Events.OnCreatePlayer.Add(Indicator.reset)
 
 return Indicator

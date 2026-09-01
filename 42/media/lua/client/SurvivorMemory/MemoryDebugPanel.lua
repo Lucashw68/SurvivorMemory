@@ -79,11 +79,28 @@ function DebugPanel:rebuild()
     for name, value in pairs(root.debug or {}) do add("IGUI_SM_DebugCounter", name .. "=" .. tostring(value)) end
     if memory then
         add("IGUI_SM_DebugBuildingKey", memory.buildingKey)
+        add("IGUI_SM_DebugPlaceDesignation", memory.placeDesignation)
+        if memory.emotionalMemory then
+            add("IGUI_SM_DebugEmotionalObservedAt", memory.emotionalMemory.observedAt)
+            add("IGUI_SM_DebugEmotionalLastReactionAt",
+                memory.emotionalMemory.lastReactionAt or getText("IGUI_SM_DebugNone"))
+            add("IGUI_SM_DebugEmotionalSafeReturns", memory.emotionalMemory.safeReturns)
+        end
         add("IGUI_SM_DebugFirstRaw", memory.firstVisited)
         add("IGUI_SM_DebugLastRaw", memory.lastVisited)
         for _, key in ipairs(sortedKeys(memory.roomsKnown)) do add("IGUI_SM_DebugRoomKey", key) end
         for _, key in ipairs(sortedKeys(memory.containersKnown)) do add("IGUI_SM_DebugContainerKnownKey", key) end
         for _, key in ipairs(sortedKeys(memory.containersInspected)) do add("IGUI_SM_DebugContainerInspectedKey", key) end
+    end
+    for _, key in ipairs(sortedKeys(root.importantMemories)) do
+        local observation = root.importantMemories[key]
+        add("IGUI_SM_DebugImportantMemory", key .. "@" .. tostring(observation.observedAt))
+    end
+    for _, key in ipairs(sortedKeys(root.vehicleMemories)) do
+        local observation = root.vehicleMemories[key]
+        add("IGUI_SM_DebugVehicleMemory", key .. "@" .. tostring(observation.observedAt)
+            .. " [" .. tostring(observation.x) .. "," .. tostring(observation.y)
+            .. "," .. tostring(observation.z) .. "]")
     end
     self.scroll:setScrollHeight(math.max(self.scroll:getHeight(), self.contentY + self.padding))
 end

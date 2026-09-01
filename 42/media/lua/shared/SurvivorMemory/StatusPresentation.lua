@@ -16,4 +16,8 @@ function StatusPresentation.text(status)
     return getText("IGUI_SM_Status_" .. tostring(status or "VISITED"))
 end
 
+function StatusPresentation.needsRefresh(presentedStatus, currentStatus)
+    return presentedStatus ~= currentStatus
+end
+
 return StatusPresentation

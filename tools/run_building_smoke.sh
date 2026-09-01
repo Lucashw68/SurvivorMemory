@@ -38,7 +38,7 @@ fi
 case "$cache_dir" in /tmp/SurvivorMemory-Smoke|/tmp/SurvivorMemory-Smoke-*) ;; *) echo "SMOKE FAIL: cache non sûr" >&2; exit 126 ;; esac
 
 mkdir -p "$mod_dir" "$cache_dir/Screenshots" "$agent_classes"
-rsync -a --delete --exclude='.git/' --exclude='test-results/' "$project_dir/" "$mod_dir/"
+rsync -a --delete --exclude='.git/' --exclude='tests/results/' "$project_dir/" "$mod_dir/"
 if [ "$with_neatui" = 1 ]; then
     mkdir -p "$neat_mod_dir"
     rsync -a --delete "$neatui_dir/" "$neat_mod_dir/"
@@ -65,7 +65,8 @@ printf '%s\n' 'VERSION=1' "DebugScenario.ForceLaunch=$force_launch" > "$cache_di
 pz_user_dir=${PZ_USER_DIR:-${PZ_HOME:-"$HOME/Zomboid"}}
 if [ -f "$pz_user_dir/options.ini" ]; then
     cp "$pz_user_dir/options.ini" "$cache_dir/options.ini"
-    sed -i -e 's/^fullScreen=.*/fullScreen=false/' -e 's/^borderlessWindow=.*/borderlessWindow=false/' -e 's/^width=.*/width=960/' -e 's/^height=.*/height=720/' -e 's/^focusloss=.*/focusloss=false/' "$cache_dir/options.ini"
+    sed -i -e 's/^fullScreen=.*/fullScreen=false/' -e 's/^borderlessWindow=.*/borderlessWindow=false/' -e 's/^width=.*/width=960/' -e 's/^height=.*/height=720/' -e 's/^focusloss=.*/focusloss=false/' -e 's/^language=.*/language=EN/' "$cache_dir/options.ini"
+    grep -q '^language=' "$cache_dir/options.ini" || printf '%s\n' 'language=EN' >> "$cache_dir/options.ini"
 fi
 
 : > "$console_file"
@@ -93,11 +94,11 @@ done
 if [ -z "$result" ]; then echo "SMOKE FAIL: jeu terminé sans verdict" >&2; tail -n 100 "$console_file" >&2; exit 1; fi
 echo "$result"
 grep "\[SurvivorMemory\] $result_tag \(CHECK\|METRICS\|SAVE\|LOAD\)" "$console_file" || true
-mkdir -p "$project_dir/docs/images" "$project_dir/test-results"
+mkdir -p "$project_dir/tests/results/screenshots"
 if [ "$with_neatui" = 1 ]; then result_file="$mode-console.txt"; else result_file="$mode-vanilla-ui-console.txt"; fi
-cp "$console_file" "$project_dir/test-results/$result_file"
+cp "$console_file" "$project_dir/tests/results/$result_file"
 if [ "$mode" = building ] && [ "$with_neatui" = 1 ]; then
-    if [ -f "$cache_dir/Screenshots/survivor-memory-panel.png" ]; then cp "$cache_dir/Screenshots/survivor-memory-panel.png" "$project_dir/docs/images/survivor-memory-panel.png"; fi
-    if [ -f "$cache_dir/Screenshots/survivor-memory-world-map.png" ]; then cp "$cache_dir/Screenshots/survivor-memory-world-map.png" "$project_dir/docs/images/survivor-memory-world-map.png"; fi
+    if [ -f "$cache_dir/Screenshots/survivor-memory-panel.png" ]; then cp "$cache_dir/Screenshots/survivor-memory-panel.png" "$project_dir/tests/results/screenshots/survivor-memory-panel.png"; fi
+    if [ -f "$cache_dir/Screenshots/survivor-memory-world-map.png" ]; then cp "$cache_dir/Screenshots/survivor-memory-world-map.png" "$project_dir/tests/results/screenshots/survivor-memory-world-map.png"; fi
 fi
 case "$result" in *'status=PASS'*) exit 0 ;; *) exit 1 ;; esac

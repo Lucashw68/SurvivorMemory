@@ -1,3 +1,4 @@
+require "SurvivorMemory/ModOptions"
 require "SurvivorMemory/Runtime"
 require "SurvivorMemory/MemoryDebugPanel"
 require "SurvivorMemory/MemoryPanel"

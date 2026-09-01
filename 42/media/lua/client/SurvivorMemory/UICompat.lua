@@ -1,6 +1,7 @@
 require "ISUI/ISButton"
 require "ISUI/ISPanel"
 require "ISUI/ISCollapsableWindow"
+require "SurvivorMemory/ModOptions"
 
 SurvivorMemory = SurvivorMemory or {}
 SurvivorMemory.UICompat = SurvivorMemory.UICompat or {}
@@ -14,7 +15,7 @@ local function isActivated(modId)
 end
 
 local neatAvailable = false
-if isActivated("NeatUI_Framework") then
+if SurvivorMemory.ModOptions.enabled("preferNeatUI") and isActivated("NeatUI_Framework") then
     local buttonLoaded = pcall(require, "neatui_framework/ui/ni_squarebutton")
     local patchLoaded = pcall(require, "neatui_framework/neattool/neattool_9patch")
     neatAvailable = buttonLoaded and patchLoaded and NI_SquareButton ~= nil and NinePatchTexture ~= nil

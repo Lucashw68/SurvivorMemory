@@ -2,9 +2,17 @@ SurvivorMemory = SurvivorMemory or {}
 SurvivorMemory.MemoryStore = SurvivorMemory.MemoryStore or {}
 
 require "SurvivorMemory/LocationName"
+require "SurvivorMemory/PlaceDesignation"
+require "SurvivorMemory/EmotionalMemory"
+require "SurvivorMemory/ImportantMemory"
+require "SurvivorMemory/VehicleMemory"
 
 local MemoryStore = SurvivorMemory.MemoryStore
-MemoryStore.SCHEMA_VERSION = 1
+local PlaceDesignation = SurvivorMemory.PlaceDesignation
+local EmotionalMemory = SurvivorMemory.EmotionalMemory
+local ImportantMemory = SurvivorMemory.ImportantMemory
+local VehicleMemory = SurvivorMemory.VehicleMemory
+MemoryStore.SCHEMA_VERSION = 5
 MemoryStore.MOD_DATA_KEY = "SurvivorMemory"
 MemoryStore.Status = {
     VISITED = "VISITED",
@@ -45,6 +53,8 @@ local function sanitizeBuilding(key, memory)
     memory.containersKnown = sanitizeObservations(memory.containersKnown)
     memory.containersInspected = sanitizeObservations(memory.containersInspected)
     memory.identityVersion = math.max(1, math.floor(tonumber(memory.identityVersion) or 1))
+    memory.placeDesignation = PlaceDesignation.normalize(memory.placeDesignation)
+    memory.emotionalMemory = EmotionalMemory.sanitize(memory.emotionalMemory)
     if not SurvivorMemory.LocationName.isValidKind(memory.locationKind) then
         memory.locationKind = "BUILDING"
     end
@@ -61,14 +71,36 @@ function MemoryStore.migrate(raw)
         raw.schemaVersion = 1
         version = 1
     end
+    if version == 1 then
+        raw.schemaVersion = 2
+        version = 2
+    end
+    if version == 2 then
+        raw.schemaVersion = 3
+        version = 3
+    end
+    if version == 3 then
+        raw.importantMemories = raw.importantMemories or {}
+        raw.schemaVersion = 4
+        version = 4
+    end
+    if version == 4 then
+        raw.vehicleMemories = raw.vehicleMemories or {}
+        raw.schemaVersion = 5
+        version = 5
+    end
     if version ~= MemoryStore.SCHEMA_VERSION then
         error("Unsupported Survivor Memory schema: " .. tostring(version))
     end
     raw.buildings = raw.buildings or {}
     raw.debug = raw.debug or {}
+    raw.importantMemories = raw.importantMemories or {}
+    raw.vehicleMemories = raw.vehicleMemories or {}
     raw.revision = math.max(0, math.floor(tonumber(raw.revision) or 0))
     if type(raw.buildings) ~= "table" then raw.buildings = {} end
     if type(raw.debug) ~= "table" then raw.debug = {} end
+    if type(raw.importantMemories) ~= "table" then raw.importantMemories = {} end
+    if type(raw.vehicleMemories) ~= "table" then raw.vehicleMemories = {} end
     for key, memory in pairs(raw.buildings) do
         local sanitized = sanitizeBuilding(key, memory)
         if sanitized then
@@ -77,6 +109,13 @@ function MemoryStore.migrate(raw)
         else
             raw.buildings[key] = nil
         end
+    end
+    for key, observation in pairs(raw.importantMemories) do
+        local sanitized = ImportantMemory.sanitize(key, observation)
+        raw.importantMemories[key] = sanitized
+    end
+    for key, observation in pairs(raw.vehicleMemories) do
+        raw.vehicleMemories[key] = VehicleMemory.sanitize(key, observation)
     end
     return raw
 end
@@ -110,7 +149,15 @@ function MemoryStore.newBuilding(identity, observedAt)
         identityVersion = 1,
         nativeIdObserved = identity.nativeId,
         locationKind = "BUILDING",
+        placeDesignation = PlaceDesignation.NONE,
     }
+end
+
+function MemoryStore.setPlaceDesignation(memory, designation)
+    if not memory or not PlaceDesignation.isValid(designation) then return false end
+    if PlaceDesignation.normalize(memory.placeDesignation) == designation then return false end
+    memory.placeDesignation = designation
+    return true
 end
 
 function MemoryStore.enterBuilding(root, identity, observedAt)

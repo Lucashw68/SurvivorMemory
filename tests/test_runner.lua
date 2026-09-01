@@ -12,6 +12,12 @@ local MemoryStore = require "SurvivorMemory/MemoryStore"
 local VisitSession = require "SurvivorMemory/VisitSession"
 local LocationName = require "SurvivorMemory/LocationName"
 local StatusPresentation = require "SurvivorMemory/StatusPresentation"
+local PlaceDesignation = require "SurvivorMemory/PlaceDesignation"
+local EmotionalMemory = require "SurvivorMemory/EmotionalMemory"
+local ImportantMemory = require "SurvivorMemory/ImportantMemory"
+local VehicleMemory = require "SurvivorMemory/VehicleMemory"
+local VisibleObservation = require "SurvivorMemory/VisibleObservation"
+local Settings = require "SurvivorMemory/Settings"
 function getText(key, value)
     if value == nil then return key end
     return key .. ":" .. tostring(value)
@@ -49,11 +55,12 @@ truthy(identity.key ~= BuildingIdentity.fromFields(nextHouse).key, "different bu
 equal(BuildingIdentity.fromFields(deepCopy(house)).key, identity.key, "building identity serialization")
 
 local rootData = MemoryStore.migrate(nil)
-equal(rootData.schemaVersion, 1, "new schema version")
+equal(rootData.schemaVersion, 5, "new schema version")
 local memory = MemoryStore.enterBuilding(rootData, identity, 24)
 equal(memory.firstVisited, 24, "first visit")
 equal(memory.lastVisited, 24, "first lastVisited")
 equal(memory.visitCount, 1, "first visit count")
+equal(memory.placeDesignation, PlaceDesignation.NONE, "new building has no personal designation")
 
 MemoryStore.enterBuilding(rootData, identity, 99.5)
 equal(memory.firstVisited, 24, "first visit remains stable")
@@ -110,7 +117,7 @@ equal(MemoryStore.stats(rootData, memory).containersInspected, 2, "source buildi
 local modData = {}
 local attached = MemoryStore.forModData(modData)
 truthy(attached == modData.SurvivorMemory, "player modData attachment")
-equal(attached.schemaVersion, 1, "player modData migration")
+equal(attached.schemaVersion, 5, "player modData migration")
 
 equal(TimeFormat.age(100, 99), "IGUI_SM_Today", "human time today")
 equal(TimeFormat.age(100, 75), "IGUI_SM_Yesterday", "human time yesterday")
@@ -123,7 +130,7 @@ equal(accepted, false, "unknown persistence version rejected")
 
 local recoveredModData = { SurvivorMemory = { schemaVersion = 999, buildings = {} } }
 local recovered = MemoryStore.forModData(recoveredModData)
-equal(recovered.schemaVersion, 1, "future schema degrades to fresh store")
+equal(recovered.schemaVersion, 5, "future schema degrades to fresh store")
 equal(recoveredModData.SurvivorMemoryRecovery.schemaVersion, 999, "future schema recovery marker")
 
 local partial = MemoryStore.migrate({
@@ -138,13 +145,240 @@ equal(partial.buildings.valid.firstVisited, 12, "partial first timestamp repaire
 equal(type(partial.buildings.valid.roomsKnown), "table", "partial room set repaired")
 equal(partial.buildings.invalid, nil, "unrecoverable building removed")
 equal(type(partial.debug), "table", "corrupted debug counters repaired")
+equal(partial.schemaVersion, 5, "v1 store migrates to current schema")
+equal(partial.buildings.valid.placeDesignation, PlaceDesignation.NONE, "v1 building migrates to no designation")
+
+local corruptDesignation = MemoryStore.migrate({
+    schemaVersion = 3,
+    buildings = {
+        invalidPlace = { firstVisited = 1, lastVisited = 1, placeDesignation = "SAFEHOUSE" },
+    },
+})
+equal(corruptDesignation.buildings.invalidPlace.placeDesignation, PlaceDesignation.NONE,
+    "invalid personal designation degrades safely")
+
+local severeSignal = {
+    panic = 90, health = 45, pain = 60, bleeding = 1,
+    veryCloseZombies = 2, chasingZombies = 4, targeted = true,
+}
+equal(EmotionalMemory.isSevere(severeSignal), true, "combined severe danger qualifies")
+equal(EmotionalMemory.isSevere({ panic = 100, health = 20 }), false,
+    "panic and injury without real danger do not qualify")
+equal(EmotionalMemory.isSevere({ panic = 100, health = 100, veryCloseZombies = 5 }), false,
+    "panic and zombies without vulnerability do not qualify")
+local tracker = nil
+local triggered = false
+for _ = 1, 14 do tracker, triggered = EmotionalMemory.updateTracker(tracker, severeSignal, 1) end
+equal(triggered, false, "severe instant does not create memory")
+tracker, triggered = EmotionalMemory.updateTracker(tracker, severeSignal, 1)
+equal(triggered, true, "sustained severe event creates memory")
+tracker = EmotionalMemory.updateTracker(tracker, severeSignal, 2)
+tracker = EmotionalMemory.updateTracker(tracker, {}, 3)
+tracker = EmotionalMemory.updateTracker(tracker, {}, 1)
+equal(tracker.dangerSeconds, 0, "quiet interval resets danger duration")
+
+truthy(EmotionalMemory.remember(memory, 240), "emotional observation stored")
+equal(memory.emotionalMemory.observedAt, 240, "emotional timestamp stored")
+local freshReaction = EmotionalMemory.reaction(memory.emotionalMemory, 264)
+equal(freshReaction.panic, 12, "fresh emotional reaction uses modest vanilla panic")
+equal(freshReaction.stress, 0.05, "fresh emotional reaction uses modest vanilla stress")
+truthy(EmotionalMemory.recordReaction(memory.emotionalMemory, 264), "reaction timestamp stored")
+equal(EmotionalMemory.reaction(memory.emotionalMemory, 265), nil, "reaction cooldown prevents continuous effect")
+local agedReaction = EmotionalMemory.reaction({ observedAt = 0, safeReturns = 0 }, 24 * 45)
+equal(agedReaction.panic, 4, "old emotional memory naturally weakens")
+equal(EmotionalMemory.reaction({ observedAt = 0, safeReturns = 0 }, 24 * 100), nil,
+    "very old emotional memory has no reaction")
+memory.emotionalMemory.lastReactionAt = nil
+truthy(EmotionalMemory.recordSafeReturn(memory), "first safe return habituates")
+truthy(EmotionalMemory.recordSafeReturn(memory), "second safe return habituates")
+truthy(EmotionalMemory.recordSafeReturn(memory), "third safe return forgets")
+equal(memory.emotionalMemory, nil, "habituation removes obsolete emotional memory")
+
+local migratedEmotion = MemoryStore.migrate({
+    schemaVersion = 2,
+    buildings = { emotional = { firstVisited = 1, lastVisited = 2,
+        emotionalMemory = { observedAt = 1, safeReturns = 1 } } },
+})
+equal(migratedEmotion.schemaVersion, 5, "v2 store migrates through to v5")
+equal(migratedEmotion.buildings.emotional.emotionalMemory.safeReturns, 1,
+    "valid emotional memory survives migration")
+local corruptEmotion = MemoryStore.migrate({
+    schemaVersion = 3,
+    buildings = { emotional = { firstVisited = 1, lastVisited = 2,
+        emotionalMemory = { observedAt = "bad" } } },
+})
+equal(corruptEmotion.buildings.emotional.emotionalMemory, nil,
+    "corrupt emotional memory degrades safely")
+
+equal(ImportantMemory.kindFromFields({ objectType = "IsoGenerator" }), "GENERATOR",
+    "generator classification is explicit")
+equal(ImportantMemory.kindFromFields({ hasFuelAmount = true }), "GAS_PUMP",
+    "fuelAmount sprite property classifies gas pump")
+equal(ImportantMemory.kindFromFields({ containerType = "woodstove" }), "WOOD_STOVE",
+    "woodstove container classification is explicit")
+equal(ImportantMemory.kindFromFields({ containerType = "counter" }), nil,
+    "ordinary loot is not worth remembering")
+local buildingPlace = ImportantMemory.placeKey(identity.key, 101, 201, 0)
+equal(buildingPlace, "building:" .. identity.key, "building aggregates important observations")
+equal(ImportantMemory.placeKey(nil, 109, 201, 0), "area:10:20:0",
+    "outdoor observations use deterministic ten-tile place")
+local createdGenerator, generatorMemory = ImportantMemory.observe(rootData, "GENERATOR", {
+    buildingKey = identity.key, x = 101, y = 201, z = 0,
+}, 300)
+equal(createdGenerator, true, "first important observation creates memory")
+equal(generatorMemory.observedAt, 300, "important observation stores in-game time")
+local repeatedGenerator, refreshedGenerator = ImportantMemory.observe(rootData, "GENERATOR", {
+    buildingKey = identity.key, x = 103, y = 202, z = 0,
+}, 324)
+equal(repeatedGenerator, false, "same kind in same building stays aggregated")
+equal(refreshedGenerator.observedAt, 324, "re-observation refreshes last seen time")
+equal(#ImportantMemory.forBuilding(rootData, identity.key), 1,
+    "building exposes one aggregated important memory")
+local createdPump = ImportantMemory.observe(rootData, "GAS_PUMP", { x = 209, y = 301, z = 0 }, 350)
+equal(createdPump, true, "outdoor gas pump creates personal memory")
+equal(#ImportantMemory.outdoor(rootData), 1, "outdoor important memory is available to map overlay")
+local importantReload = MemoryStore.migrate(deepCopy(rootData))
+equal(#ImportantMemory.forBuilding(importantReload, identity.key), 1,
+    "important memory survives serialization")
+local migratedImportant = MemoryStore.migrate({ schemaVersion = 3, buildings = {}, debug = {} })
+equal(migratedImportant.schemaVersion, 5, "v3 store migrates through to v5")
+equal(type(migratedImportant.importantMemories), "table", "v4 migration creates important memory collection")
+local corruptImportant = MemoryStore.migrate({
+    schemaVersion = 4, buildings = {}, debug = {},
+    importantMemories = { bad = { kind = "NAILS", observedAt = 1, x = 1, y = 1, z = 0 } },
+})
+equal(corruptImportant.importantMemories.bad, nil,
+    "unsupported or corrupt important memory degrades safely")
+
+local visibleCandidates = { generator = true, pump = true }
+local visibleNow = { generator = true }
+local visibleSet, newlyVisible, checked = VisibleObservation.reconcile(nil, visibleCandidates,
+    function(candidate) return visibleNow[candidate] == true end)
+equal(checked, 2, "visible observer checks only registered candidates")
+equal(#newlyVisible, 1, "first visible transition is reported")
+equal(newlyVisible[1], "generator", "visible transition identifies candidate")
+visibleSet, newlyVisible = VisibleObservation.reconcile(visibleSet, visibleCandidates,
+    function(candidate) return visibleNow[candidate] == true end)
+equal(#newlyVisible, 0, "continuously visible candidate is not repeated")
+visibleNow.generator = nil
+visibleSet = select(1, VisibleObservation.reconcile(visibleSet, visibleCandidates,
+    function(candidate) return visibleNow[candidate] == true end))
+visibleNow.generator = true
+visibleSet, newlyVisible = VisibleObservation.reconcile(visibleSet, visibleCandidates,
+    function(candidate) return visibleNow[candidate] == true end)
+equal(#newlyVisible, 1, "candidate is remembered again after leaving and re-entering view")
+equal(visibleSet.pump, nil, "never-visible candidate stays unknown")
+equal(VisibleObservation.isScreenPointVisible(100, 80, 0, 0, 200, 160), true,
+    "visible observation accepts a point inside the player viewport")
+equal(VisibleObservation.isScreenPointVisible(201, 80, 0, 0, 200, 160), false,
+    "line-of-sight object outside the viewport is not observed")
+equal(VisibleObservation.isScreenPointVisible(100, -1, 0, 0, 200, 160), false,
+    "object above the viewport is not observed")
+equal(VisibleObservation.isScreenPointVisible(100, 80, 0, 0, 0, 160), false,
+    "invalid viewport degrades without observing")
+
+equal(Settings.enabled(nil, "master"), true, "mod options default to enabled")
+equal(Settings.withDefault(false, true), false, "native false option is never replaced by default true")
+equal(Settings.withDefault(nil, true), true, "missing native option uses its default")
+equal(Settings.enabled(nil, "buildingMemory"), true, "building memory defaults to enabled")
+local disabledMod = { enabled = false }
+equal(Settings.enabled(disabledMod, "buildingMemory"), false, "master switch disables building memory")
+equal(Settings.enabled(disabledMod, "importantMemory"), false, "master switch disables important memory")
+equal(Settings.enabled(disabledMod, "vehicleMemory"), false, "master switch disables vehicle memory")
+equal(Settings.enabled(disabledMod, "worldMap"), false, "master switch disables map overlay")
+local noBuildings = { buildingMemoryEnabled = false }
+equal(Settings.enabled(noBuildings, "rooms"), false, "rooms depend on building memory")
+equal(Settings.enabled(noBuildings, "containers"), false, "containers depend on building memory")
+equal(Settings.enabled(noBuildings, "places"), false, "places depend on building memory")
+equal(Settings.enabled(noBuildings, "emotionalMemory"), false, "emotional memory depends on buildings")
+equal(Settings.enabled(noBuildings, "importantMemory"), true, "important memory remains independent")
+local selectedThings = { rememberGenerators = false, rememberGasPumps = true,
+    rememberWoodStoves = false }
+equal(Settings.enabled(selectedThings, "generatorMemory"), false, "generator memory can be disabled")
+equal(Settings.enabled(selectedThings, "gasPumpMemory"), true, "gas-pump memory can remain enabled")
+equal(Settings.enabled(selectedThings, "woodStoveMemory"), false, "wood-stove memory can be disabled")
+equal(Settings.reactionMultiplier({ emotionalReactionStrength = 1 }), 0.5,
+    "reduced emotional reaction uses half strength")
+equal(Settings.reactionMultiplier({ emotionalReactionStrength = 2 }), 1,
+    "standard emotional reaction preserves strength")
+equal(Settings.markerScale({ markerSizePercent = 50 }), 0.75, "map marker scale has safe minimum")
+equal(Settings.markerScale({ markerSizePercent = 125 }), 1.25, "map marker scale uses percentage")
+equal(Settings.markerScale({ markerSizePercent = 200 }), 1.5, "map marker scale has safe maximum")
+
+local sqlVehicle = VehicleMemory.identityFromFields({
+    sqlId = 81, mechanicalId = 12004, scriptName = "Base.CarNormal",
+})
+equal(sqlVehicle.key, "vehicle:sql:81", "vehicle SQL identity is stable primary key")
+local mechanicalVehicle = VehicleMemory.identityFromFields({
+    sqlId = -1, mechanicalId = 12004, scriptName = "Base.CarNormal",
+})
+equal(mechanicalVehicle.key, "vehicle:mechanical:14:Base.CarNormal:12004",
+    "vehicle mechanical fallback is deterministic")
+equal(VehicleMemory.identityFromFields({ sqlId = -1, mechanicalId = 12004 }), nil,
+    "vehicle identity refuses ambiguous fallback")
+local vehicleCreated, vehicleObservation = VehicleMemory.observe(rootData, {
+    sqlId = -1, mechanicalId = 12004, scriptName = "Base.CarNormal",
+    displayName = "Chevalier Dart", x = 300, y = 401, z = 0,
+}, 500)
+equal(vehicleCreated, true, "first significant vehicle observation creates memory")
+equal(vehicleObservation.observedAt, 500, "vehicle stores deterministic in-game time")
+local vehicleRefreshed, movedVehicle = VehicleMemory.observe(rootData, {
+    sqlId = -1, mechanicalId = 12004, scriptName = "Base.CarNormal",
+    displayName = "Chevalier Dart", x = 350, y = 451, z = 0,
+}, 524)
+equal(vehicleRefreshed, false, "repeat vehicle observation updates one memory")
+equal(movedVehicle.x, 350, "vehicle remembers latest observed position only")
+equal(movedVehicle.observedAt, 524, "vehicle last-seen time refreshes on observation")
+equal(#VehicleMemory.all(rootData), 1, "vehicle memory has no route history")
+local promotedVehicle, promotedObservation, replacedKey = VehicleMemory.observe(rootData, {
+    sqlId = 81, mechanicalId = 12004, scriptName = "Base.CarNormal",
+    displayName = "Chevalier Dart", x = 350, y = 451, z = 0,
+}, 525)
+equal(promotedVehicle, false, "SQL assignment promotes existing fallback without duplicate")
+equal(replacedKey, mechanicalVehicle.key, "fallback vehicle key is replaced after SQL assignment")
+equal(promotedObservation.vehicleKey, sqlVehicle.key, "promoted vehicle uses persistent SQL key")
+equal(#VehicleMemory.all(rootData), 1, "identity promotion keeps one vehicle memory")
+local vehicleReload = MemoryStore.migrate(deepCopy(rootData))
+equal(vehicleReload.vehicleMemories[sqlVehicle.key].observedAt, 525,
+    "vehicle memory survives serialization")
+local migratedVehicles = MemoryStore.migrate({ schemaVersion = 4, buildings = {}, debug = {} })
+equal(migratedVehicles.schemaVersion, 5, "v4 store migrates to v5")
+equal(type(migratedVehicles.vehicleMemories), "table", "v5 migration creates vehicle collection")
+local corruptVehicles = MemoryStore.migrate({
+    schemaVersion = 5, buildings = {}, debug = {}, importantMemories = {},
+    vehicleMemories = { bad = { sqlId = "x", observedAt = 1, x = 1, y = 1, z = 0 } },
+})
+equal(corruptVehicles.vehicleMemories.bad, nil, "corrupt vehicle memory degrades safely")
+
+local statusBeforeDesignation = memory.status
+truthy(MemoryStore.setPlaceDesignation(memory, PlaceDesignation.HOME), "building marked home")
+equal(memory.placeDesignation, PlaceDesignation.HOME, "home designation stored")
+equal(memory.status, statusBeforeDesignation, "designation does not change exploration status")
+equal(MemoryStore.setPlaceDesignation(memory, PlaceDesignation.HOME), false, "duplicate home designation ignored")
+equal(MemoryStore.setPlaceDesignation(memory, "SAFEHOUSE"), false, "invalid designation rejected")
+truthy(MemoryStore.setPlaceDesignation(memory, PlaceDesignation.OUTPOST), "home changed to outpost")
+truthy(MemoryStore.setPlaceDesignation(memory, PlaceDesignation.NONE), "personal designation cleared")
+equal(PlaceDesignation.shouldShowIndicator("VISITED", PlaceDesignation.HOME), true, "home visited indicator visible")
+equal(PlaceDesignation.shouldShowIndicator("PARTIALLY_SEARCHED", PlaceDesignation.OUTPOST), true, "outpost partial indicator visible")
+equal(PlaceDesignation.shouldShowIndicator("SEARCHED", PlaceDesignation.NONE), true, "normal searched indicator visible")
+equal(PlaceDesignation.shouldShowIndicator("SEARCHED", PlaceDesignation.HOME), false, "searched home indicator hidden")
+equal(PlaceDesignation.shouldShowIndicator("SEARCHED", PlaceDesignation.OUTPOST), false, "searched outpost indicator hidden")
+
+MemoryStore.setPlaceDesignation(memory, PlaceDesignation.HOME)
+local designationReload = MemoryStore.migrate(deepCopy(rootData))
+equal(designationReload.buildings[identity.key].placeDesignation, PlaceDesignation.HOME, "designation survives serialization")
+memory = rootData.buildings[identity.key]
 
 local characterA, characterB = {}, {}
 local storeA = MemoryStore.forModData(characterA)
-MemoryStore.enterBuilding(storeA, identity, 200)
+local characterAMemory = MemoryStore.enterBuilding(storeA, identity, 200)
+MemoryStore.setPlaceDesignation(characterAMemory, PlaceDesignation.OUTPOST)
 local storeB = MemoryStore.forModData(characterB)
 equal(storeB.buildings[identity.key], nil, "new character has no inherited memory")
 truthy(storeA.buildings[identity.key] ~= nil, "original character retains memory")
+equal(storeB.buildings[identity.key], nil, "personal designation is not inherited")
+equal(next(storeB.importantMemories), nil, "important memories are not inherited")
+equal(next(storeB.vehicleMemories), nil, "vehicle memories are not inherited")
 
 local session = VisitSession.new()
 local firstEntry = VisitSession.update(session, identity.key, false)
@@ -175,6 +409,8 @@ equal(LocationName.choose("POLICE", "HOUSE"), "POLICE", "generic room cannot dow
 equal(LocationName.choose("HOUSE", "GARAGE"), "HOUSE", "house is not renamed after garage visit")
 equal(StatusPresentation.color("VISITED").r, 0.82, "visited indicator is red")
 equal(StatusPresentation.color("SEARCHED").g, 0.72, "searched indicator is green")
+equal(StatusPresentation.needsRefresh("VISITED", "VISITED"), false, "matching indicator status stays current")
+equal(StatusPresentation.needsRefresh("PARTIALLY_SEARCHED", "SEARCHED"), true, "changed indicator status refreshes")
 
 memory.locationKind = "GROCERY"
 rootData.revision = 42
