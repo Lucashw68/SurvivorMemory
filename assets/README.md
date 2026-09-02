@@ -9,6 +9,8 @@ déploiement imposés par Project Zomboid.
 - `branding/poster.png` : artwork canonique du mod et de la preview Workshop ;
 - `branding/icon.png` : icône canonique du mod ;
 - `runtime/` : textures réellement chargées par le Lua Survivor Memory ;
+- `workshop/description/` : dérivés de présentation centrés sur des canevas
+  transparents, destinés exclusivement au BBCode Workshop ;
 - `workshop/screenshots/` : destination des captures réelles anglaises préparées
   pour la page Workshop. Le dossier peut rester vide tant qu’une nouvelle
   capture conforme n’a pas été validée.
