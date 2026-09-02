@@ -58,16 +58,16 @@ is no separate mod-language setting.
 
 ## Repository layout
 
-- `42/` contient exclusivement le runtime B42 et ses miroirs de déploiement ;
-- `assets/` contient les sources canoniques de tous les visuels du mod ;
-- `docs/` contient les décisions permanentes et les protocoles de validation ;
-- `research/` peut conserver localement d'anciens plans et campagnes ; il est ignoré par Git ;
-- `tests/` contient les tests déterministes et leurs résultats locaux courants ;
-- `tools/` contient uniquement les helpers spécifiques à Survivor Memory ;
-- `workshop/` contient les metadata et la preview requises par l'éditeur PZ.
+- `42/` contains the Build 42 runtime and its required deployment mirrors;
+- `assets/` contains the canonical sources for every visual used by the mod;
+- `docs/` contains permanent design decisions and validation procedures;
+- `research/` may hold old local plans and test campaigns and is ignored by Git;
+- `tests/` contains deterministic tests and their current local results;
+- `tools/` contains only Survivor Memory-specific helpers;
+- `workshop/` contains metadata and the preview required by the PZ editor.
 
-Voir [`assets/README.md`](assets/README.md) pour la correspondance entre sources
-canoniques et chemins imposés par B42.
+See [`assets/README.md`](assets/README.md) for the mapping between canonical
+sources and the paths required by Build 42.
 
 ## Development
 
