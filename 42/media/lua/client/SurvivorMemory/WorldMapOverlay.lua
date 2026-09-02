@@ -223,9 +223,16 @@ end
 local function drawVehicleTooltip(map, observation, x, y)
     local lines = {
         observation.displayName or getText("IGUI_SM_GenericVehicle"),
-        getText("IGUI_SM_VehicleMapLastSeen",
-            TimeFormat.age(TimeFormat.worldAgeHours(), observation.observedAt)),
     }
+    if observation.fuelState then
+        table.insert(lines, getText("IGUI_SM_VehicleFuel_" .. observation.fuelState))
+    end
+    local engineSummary = VehicleMemory.engineSummary(observation)
+    if engineSummary then
+        table.insert(lines, getText("IGUI_SM_VehicleEngine_" .. engineSummary))
+    end
+    table.insert(lines, getText("IGUI_SM_VehicleMapLastSeen",
+        TimeFormat.age(TimeFormat.worldAgeHours(), observation.observedAt)))
     local font = UIFont.Small
     local fontHeight = getTextManager():getFontHeight(font)
     local width = 0

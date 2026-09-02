@@ -174,6 +174,22 @@ local function onTick()
             "sql=" .. tostring(descriptor and descriptor.sqlId)
                 .. " mechanical=" .. tostring(descriptor and descriptor.mechanicalId))
         if Runner.vehicle then
+            local gasTank = Runner.vehicle:getPartById("GasTank")
+            local engine = Runner.vehicle:getPartById("Engine")
+            if gasTank and gasTank:getContainerCapacity() > 0 then
+                gasTank:setContainerContentAmount(gasTank:getContainerCapacity() * 0.10)
+            end
+            if engine then engine:setCondition(20) end
+            check(SurvivorMemory.Runtime.observeVehicle(player, Runner.vehicle, "mechanics"),
+                "vehicle_remembered_on_mechanics")
+            local mechanicsMemory = SurvivorMemory.VehicleMemory.all(outdoorRoot)[1]
+            check(mechanicsMemory
+                    and mechanicsMemory.fuelState == SurvivorMemory.VehicleMemory.FuelState.LOW,
+                "vehicle_mechanics_remembers_broad_fuel_state")
+            check(mechanicsMemory
+                    and mechanicsMemory.engineCondition
+                        == SurvivorMemory.VehicleMemory.EngineCondition.POOR,
+                "vehicle_mechanics_remembers_broad_engine_condition")
             Runner.vehicle:enter(0, player)
             triggerEvent("OnEnterVehicle", player)
             check(#SurvivorMemory.VehicleMemory.all(outdoorRoot) == 1,

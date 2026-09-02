@@ -3,6 +3,15 @@ SurvivorMemory.VehicleMemory = SurvivorMemory.VehicleMemory or {}
 
 local VehicleMemory = SurvivorMemory.VehicleMemory
 
+VehicleMemory.FuelState = {
+    EMPTY = "EMPTY",
+    LOW = "LOW",
+    SOME = "SOME",
+    FULL = "FULL",
+}
+VehicleMemory.EngineActivity = { OFF = "OFF", RUNNING = "RUNNING" }
+VehicleMemory.EngineCondition = { FAILED = "FAILED", POOR = "POOR", USABLE = "USABLE" }
+
 local function integer(value)
     value = tonumber(value)
     if not value then return nil end
@@ -11,6 +20,38 @@ end
 
 local function validText(value)
     return type(value) == "string" and value ~= "" and value or nil
+end
+
+local function validValue(values, value)
+    return type(value) == "string" and values[value] == value and value or nil
+end
+
+function VehicleMemory.fuelState(amount, capacity)
+    amount, capacity = tonumber(amount), tonumber(capacity)
+    if not amount or not capacity or capacity <= 0 then return nil end
+    local ratio = math.max(0, math.min(1, amount / capacity))
+    if amount <= 0.01 then return VehicleMemory.FuelState.EMPTY end
+    if ratio < 0.15 then return VehicleMemory.FuelState.LOW end
+    if ratio >= 0.75 then return VehicleMemory.FuelState.FULL end
+    return VehicleMemory.FuelState.SOME
+end
+
+function VehicleMemory.engineCondition(condition)
+    condition = tonumber(condition)
+    if not condition then return nil end
+    if condition <= 0 then return VehicleMemory.EngineCondition.FAILED end
+    if condition < 30 then return VehicleMemory.EngineCondition.POOR end
+    return VehicleMemory.EngineCondition.USABLE
+end
+
+function VehicleMemory.engineSummary(observation)
+    if type(observation) ~= "table" then return nil end
+    if observation.engineActivity == VehicleMemory.EngineActivity.RUNNING then return "RUNNING" end
+    if validValue(VehicleMemory.EngineCondition, observation.engineCondition) then
+        return observation.engineCondition
+    end
+    if observation.engineActivity == VehicleMemory.EngineActivity.OFF then return "OFF" end
+    return nil
 end
 
 function VehicleMemory.identityFromFields(fields)
@@ -54,6 +95,15 @@ function VehicleMemory.sanitize(key, observation)
     observation.displayName = validText(observation.displayName) or identity.scriptName
     observation.x, observation.y, observation.z = x, y, z
     observation.observedAt = observedAt
+    observation.fuelState = validValue(VehicleMemory.FuelState, observation.fuelState)
+    observation.fuelObservedAt = observation.fuelState and tonumber(observation.fuelObservedAt) or nil
+    observation.engineActivity = validValue(VehicleMemory.EngineActivity, observation.engineActivity)
+    observation.engineActivityObservedAt = observation.engineActivity
+        and tonumber(observation.engineActivityObservedAt) or nil
+    observation.engineCondition = validValue(VehicleMemory.EngineCondition,
+        observation.engineCondition)
+    observation.engineConditionObservedAt = observation.engineCondition
+        and tonumber(observation.engineConditionObservedAt) or nil
     return observation
 end
 
@@ -71,18 +121,19 @@ function VehicleMemory.observe(root, descriptor, observedAt)
     if not identity or not x or not y or not z or type(observedAt) ~= "number" then return false, nil end
     root.vehicleMemories = type(root.vehicleMemories) == "table" and root.vehicleMemories or {}
 
-    local previousKey
+    local previousKey, previousObservation
     if identity.kind == "SQL" then
         for key, observation in pairs(root.vehicleMemories) do
             if key ~= identity.key and sameMechanicalIdentity(observation, descriptor) then
                 previousKey = key
+                previousObservation = observation
                 root.vehicleMemories[key] = nil
                 break
             end
         end
     end
 
-    local existing = root.vehicleMemories[identity.key]
+    local existing = root.vehicleMemories[identity.key] or previousObservation
     local created = existing == nil and previousKey == nil
     local observation = existing or {}
     observation.vehicleKey = identity.key
@@ -93,6 +144,21 @@ function VehicleMemory.observe(root, descriptor, observedAt)
     observation.displayName = validText(descriptor.displayName) or identity.scriptName
     observation.x, observation.y, observation.z = x, y, z
     observation.observedAt = observedAt
+    local fuelState = validValue(VehicleMemory.FuelState, descriptor.fuelState)
+    if fuelState then
+        observation.fuelState = fuelState
+        observation.fuelObservedAt = observedAt
+    end
+    local engineActivity = validValue(VehicleMemory.EngineActivity, descriptor.engineActivity)
+    if engineActivity then
+        observation.engineActivity = engineActivity
+        observation.engineActivityObservedAt = observedAt
+    end
+    local engineCondition = validValue(VehicleMemory.EngineCondition, descriptor.engineCondition)
+    if engineCondition then
+        observation.engineCondition = engineCondition
+        observation.engineConditionObservedAt = observedAt
+    end
     root.vehicleMemories[identity.key] = observation
     return created, observation, previousKey
 end

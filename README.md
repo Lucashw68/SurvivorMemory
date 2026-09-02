@@ -25,7 +25,10 @@ when it becomes genuinely visible; no context-menu action is required.
 Vehicle Memory remembers where the character last meaningfully encountered a
 vehicle: when entering it, inspecting its mechanics, or leaving it. The World
 Map marker is a last-seen position, never live tracking; driving does not record
-a route or continuously update the memory.
+a route or continuously update the memory. It also keeps broad observations
+such as an empty, low, partly filled, or apparently full tank; whether the
+engine was running; and a rough engine condition after a mechanics inspection.
+It never stores exact remote telemetry.
 
 The mod never scans the world for hidden knowledge. Memories are personal and
 may become outdated, just like the survivor who formed them. NeatUI Framework

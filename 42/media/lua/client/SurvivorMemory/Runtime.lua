@@ -89,7 +89,7 @@ local function vehicleDisplayName(vehicle, script)
     return translated or tostring(name or script:getFullName() or getText("IGUI_SM_GenericVehicle"))
 end
 
-function Runtime.vehicleDescriptor(vehicle)
+function Runtime.vehicleDescriptor(vehicle, reason)
     if not vehicle or not instanceof(vehicle, "BaseVehicle") then return nil end
     local square = vehicle:getSquare()
     local script = vehicle:getScript()
@@ -100,7 +100,18 @@ function Runtime.vehicleDescriptor(vehicle)
         scriptName = vehicle:getScriptName() or script:getFullName() or script:getName(),
         displayName = vehicleDisplayName(vehicle, script),
         x = square:getX(), y = square:getY(), z = square:getZ(),
+        engineActivity = vehicle:isEngineRunning()
+            and VehicleMemory.EngineActivity.RUNNING or VehicleMemory.EngineActivity.OFF,
     }
+    local fuelVisible = reason == "mechanics" or vehicle:isEngineRunning()
+        or vehicle:isKeysInIgnition()
+    local gasTank = fuelVisible and vehicle:getPartById("GasTank") or nil
+    if gasTank then
+        descriptor.fuelState = VehicleMemory.fuelState(
+            gasTank:getContainerContentAmount(), gasTank:getContainerCapacity())
+    end
+    local engine = reason == "mechanics" and vehicle:getPartById("Engine") or nil
+    if engine then descriptor.engineCondition = VehicleMemory.engineCondition(engine:getCondition()) end
     local identity = VehicleMemory.identityFromFields(descriptor)
     return identity and descriptor or nil
 end
@@ -108,7 +119,7 @@ end
 function Runtime.observeVehicle(player, vehicle, reason)
     if not ModOptions.enabled("vehicleTracking") then return false end
     if not player or not player:isLocalPlayer() then return false end
-    local descriptor = Runtime.vehicleDescriptor(vehicle)
+    local descriptor = Runtime.vehicleDescriptor(vehicle, reason)
     if not descriptor then return false end
     local root = rootFor(player)
     local _, observation = VehicleMemory.observe(root, descriptor, TimeFormat.worldAgeHours())
@@ -127,7 +138,7 @@ function Runtime.onEnterVehicle(character)
     if not vehicle then return end
     local state = stateFor(character)
     state.activeVehicle = vehicle
-    local descriptor = Runtime.vehicleDescriptor(vehicle)
+    local descriptor = Runtime.vehicleDescriptor(vehicle, "enter")
     local identity = descriptor and VehicleMemory.identityFromFields(descriptor) or nil
     state.activeVehicleKey = identity and identity.key or nil
     Runtime.observeVehicle(character, vehicle, "enter")
@@ -414,7 +425,7 @@ function Runtime.onPlayerUpdate(player)
         -- On reload the timed-action enter event has already happened. One observed
         -- resume restores the local session without sampling the driven route.
         state.activeVehicle = currentVehicle
-        local descriptor = Runtime.vehicleDescriptor(currentVehicle)
+        local descriptor = Runtime.vehicleDescriptor(currentVehicle, "resume")
         local identity = descriptor and VehicleMemory.identityFromFields(descriptor) or nil
         state.activeVehicleKey = identity and identity.key or nil
         Runtime.observeVehicle(player, currentVehicle, "resume")

@@ -67,6 +67,10 @@ local function validateReload()
         and SurvivorMemory.VehicleMemory.all(root) or {}
     check(#vehicles == 1 and vehicles[1].vehicleKey ~= nil,
         "vehicle_last_seen_memory_preserved")
+    check(#vehicles == 1 and vehicles[1].fuelState == "LOW",
+        "vehicle_fuel_summary_preserved")
+    check(#vehicles == 1 and vehicles[1].engineCondition == "POOR",
+        "vehicle_engine_summary_preserved")
     log("RESULT status=" .. (#failures == 0 and "PASS" or "FAIL") .. " failures=" .. table.concat(failures, ","))
     getCore():quitToDesktop()
 end

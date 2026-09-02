@@ -48,9 +48,27 @@ smoke automatisé.
 
 ## Données retenues
 
-Une observation contient uniquement identité, script/type, nom affiché,
-coordonnées de la case, niveau et heure in-game. Elle ne contient ni carburant,
-ni moteur, ni batterie, ni pneus, ni coffre, ni position actuelle distante.
+Une observation contient identité, script/type, nom affiché, coordonnées de la
+case, niveau et heure in-game. Elle peut aussi conserver des observations
+qualitatives :
+
+- carburant `EMPTY`, `LOW`, `SOME` ou `FULL`, sans quantité exacte ;
+- moteur en marche ou arrêté lors de la dernière interaction ;
+- état moteur `FAILED`, `POOR` ou `USABLE` après ouverture de la mécanique.
+
+Le seuil `LOW` reprend l'alerte de jauge vanilla sous 15 %. `FULL` commence à
+75 %, seuil déjà employé par `Vehicles.CheckEngine.GasTankFull`; l'UI emploie
+donc une formulation prudente (« semblait plein »). La condition moteur reste
+une catégorie grossière et jamais le pourcentage B42.
+
+Le carburant est lu lors de l'inspection mécanique, ou depuis le tableau de
+bord lorsqu'il est légitimement alimenté (moteur en marche ou clés au contact).
+La condition moteur n'est lue que pour l'action explicite « Inspect Mechanics ».
+Une interaction moins détaillée ne supprime pas la dernière observation
+légitime.
+
+La mémoire ne contient toujours ni valeur exacte de carburant ou de moteur, ni
+batterie, pneus, coffre ou position actuelle distante.
 
 L'entrée, la mécanique et la sortie sont des interactions significatives. La
 conduite ne déclenche aucun enregistrement continu : aucune route et aucun
@@ -60,7 +78,8 @@ historique de positions ne sont construits.
 
 L'overlay dessine l'icône véhicule dédiée
 `media/ui/SurvivorMemory/map-vehicle-marker.png` à `x/y/z` mémorisé et un
-tooltip avec le nom et « Last seen ». L'icône runtime 64×64 dérive par recadrage
+tooltip avec le nom, les grandes lignes carburant/moteur disponibles et « Last
+seen ». L'icône runtime 64×64 dérive par recadrage
 et réduction Lanczos de l'artwork fourni, dont le canal alpha est conservé. Le
 rendu ne crée aucun symbole vanilla persistant. Il suit le toggle Survivor Memory et le cache est
 invalidé seulement lorsque la révision du store personnel change.
