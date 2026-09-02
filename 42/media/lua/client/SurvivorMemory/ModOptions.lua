@@ -142,6 +142,32 @@ local function addTick(options, id, translation, tooltip)
     return option
 end
 
+-- B42.20.4 stores a mod keybind button's internal identifier from option.name,
+-- but later looks it up against the rendered ISLabel text. Those values differ
+-- as soon as option.name is a translation key, leaving keyBinded nil in
+-- MainOptions.keyPressHandler. Normalize only Survivor Memory's own button at
+-- click time and leave vanilla/other-mod bindings untouched.
+function ModOptions.normalizeRecallKeybindButton(button)
+    local option = ModOptions.options and ModOptions.options:getOption("recallPanelKey") or nil
+    local element = option and option.element or nil
+    if not button or not element or element.btn ~= button or not element.txt
+            or not element.txt.getName then return false end
+    button.internal = element.txt:getName()
+    return true
+end
+
+local function installKeybindCompatibility()
+    if not MainOptions or not MainOptions.onKeyBindingBtnPress
+            or MainOptions.smSurvivorMemoryKeybindCompatibility then return false end
+    local original = MainOptions.onKeyBindingBtnPress
+    MainOptions.onKeyBindingBtnPress = function(self, button, x, y)
+        ModOptions.normalizeRecallKeybindButton(button)
+        return original(self, button, x, y)
+    end
+    MainOptions.smSurvivorMemoryKeybindCompatibility = true
+    return true
+end
+
 function ModOptions.register()
     if ModOptions.registered or not (PZAPI and PZAPI.ModOptions) then return false end
     local options = PZAPI.ModOptions:create(MOD_ID, "IGUI_SM_OptionsTitle")
@@ -151,7 +177,7 @@ function ModOptions.register()
     addTick(options, "enabled", "IGUI_SM_OptionEnabled", "IGUI_SM_OptionEnabledTooltip")
     addTick(options, "preferNeatUI", "IGUI_SM_OptionPreferNeatUI",
         "IGUI_SM_OptionPreferNeatUITooltip")
-    options:addKeyBind("recallPanelKey", getText("IGUI_SM_OptionRecallPanelKey"),
+    options:addKeyBind("recallPanelKey", "IGUI_SM_OptionRecallPanelKey",
         Keyboard and Keyboard.KEY_NONE or 0, "IGUI_SM_OptionRecallPanelKeyTooltip")
 
     options:addTitle("IGUI_SM_OptionsSectionBuilding")
@@ -219,10 +245,14 @@ function ModOptions.register()
     PZAPI.ModOptions:load()
     rebuildValues()
     refreshDependencies()
+    installKeybindCompatibility()
     return true
 end
 
 ModOptions.register()
-if Events and Events.OnGameBoot then Events.OnGameBoot.Add(ModOptions.register) end
+if Events and Events.OnGameBoot then
+    Events.OnGameBoot.Add(ModOptions.register)
+    Events.OnGameBoot.Add(installKeybindCompatibility)
+end
 
 return ModOptions

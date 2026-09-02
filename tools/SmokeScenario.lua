@@ -102,8 +102,16 @@ local function onTick()
                 and nativeOptions:getOption("markerSizePercent"):getValue() == 100,
             "native_marker_size_default")
         local keyOption = nativeOptions and nativeOptions:getOption("recallPanelKey") or nil
-        check(keyOption and keyOption.name == getText("IGUI_SM_OptionRecallPanelKey"),
-            "native_keybind_uses_rendered_label")
+        check(keyOption and keyOption.name == "IGUI_SM_OptionRecallPanelKey",
+            "native_keybind_uses_translation_key")
+        local fakeLabel = { getName = function() return getText("IGUI_SM_OptionRecallPanelKey") end }
+        local fakeButton = { internal = "IGUI_SM_OptionRecallPanelKey" }
+        local previousKeyElement = keyOption and keyOption.element or nil
+        if keyOption then keyOption.element = { btn = fakeButton, txt = fakeLabel } end
+        check(SurvivorMemory.ModOptions.normalizeRecallKeybindButton(fakeButton)
+                and fakeButton.internal == getText("IGUI_SM_OptionRecallPanelKey"),
+            "native_keybind_normalizes_button_to_rendered_label")
+        if keyOption then keyOption.element = previousKeyElement end
         local allOptionsHaveTooltips = nativeOptions ~= nil
         if nativeOptions then
             for _, option in ipairs(nativeOptions.data) do
