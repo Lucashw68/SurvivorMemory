@@ -101,6 +101,26 @@ local function onTick()
         check(nativeOptions and nativeOptions:getOption("markerSizePercent")
                 and nativeOptions:getOption("markerSizePercent"):getValue() == 100,
             "native_marker_size_default")
+        local keyOption = nativeOptions and nativeOptions:getOption("recallPanelKey") or nil
+        check(keyOption and keyOption.name == getText("IGUI_SM_OptionRecallPanelKey"),
+            "native_keybind_uses_rendered_label")
+        local allOptionsHaveTooltips = nativeOptions ~= nil
+        if nativeOptions then
+            for _, option in ipairs(nativeOptions.data) do
+                if option.getValue and not option.tooltip then allOptionsHaveTooltips = false end
+            end
+        end
+        check(allOptionsHaveTooltips, "native_mod_options_have_tooltips")
+        local buildingOption = nativeOptions and nativeOptions:getOption("buildingMemoryEnabled") or nil
+        local roomsOption = nativeOptions and nativeOptions:getOption("rememberRooms") or nil
+        if buildingOption and buildingOption.onChange then buildingOption:onChange(false) end
+        check(roomsOption and roomsOption.isEnabled == false,
+            "native_category_disables_child_immediately")
+        check(roomsOption and roomsOption:getValue() == true,
+            "native_category_preserves_child_preference")
+        if buildingOption and buildingOption.onChange then buildingOption:onChange(true) end
+        check(roomsOption and roomsOption.isEnabled == true,
+            "native_category_restores_child_immediately")
         check(SurvivorMemory.UICompat ~= nil, "ui_compat_loaded")
         check(SurvivorMemory.UICompat and SurvivorMemory.UICompat.neatAvailable == SM_EXPECT_NEATUI,
             "ui_backend_expected", "neat=" .. tostring(SurvivorMemory.UICompat and SurvivorMemory.UICompat.neatAvailable))

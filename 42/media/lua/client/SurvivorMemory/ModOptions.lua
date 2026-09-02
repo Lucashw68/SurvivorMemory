@@ -69,15 +69,30 @@ local function setEnabled(id, enabled)
     if option and option.setEnabled then option:setEnabled(enabled == true) end
 end
 
-local function refreshDependencies()
-    local master = ModOptions.enabled("master")
-    local building = ModOptions.enabled("buildingMemory")
-    local places = ModOptions.enabled("places")
-    local emotional = ModOptions.enabled("emotionalMemory")
-    local important = ModOptions.enabled("importantMemory")
-    local vehicle = ModOptions.enabled("vehicleMemory")
-    local map = ModOptions.enabled("worldMap")
+local function selected(id, feature)
+    local option = ModOptions.options and ModOptions.options:getOption(id) or nil
+    if option then
+        if option.smPreviewValue ~= nil then return option.smPreviewValue == true end
+        local element = option.element
+        local optionsVisible = MainOptions and MainOptions.instance
+            and MainOptions.instance.isVisible and MainOptions.instance:isVisible()
+        if optionsVisible and option.type == "tickbox" and element and element.isSelected then
+            return element:isSelected(1)
+        end
+    end
+    return ModOptions.enabled(feature)
+end
 
+local function refreshDependencies()
+    local master = selected("enabled", "master")
+    local building = master and selected("buildingMemoryEnabled", "buildingMemory")
+    local places = building and selected("placesEnabled", "places")
+    local emotional = building and selected("emotionalMemoryEnabled", "emotionalMemory")
+    local important = master and selected("importantMemoryEnabled", "importantMemory")
+    local vehicle = master and selected("vehicleMemoryEnabled", "vehicleMemory")
+    local map = master and selected("worldMapOverlayEnabled", "worldMap")
+
+    setEnabled("preferNeatUI", master)
     setEnabled("buildingMemoryEnabled", master)
     for _, id in ipairs({ "rememberRooms", "rememberContainers", "showStatusIndicator" }) do
         setEnabled(id, building)
@@ -108,6 +123,11 @@ local function refreshDependencies()
 end
 
 local function liveApply(option, field)
+    option.onChange = function(self, value)
+        self.smPreviewValue = value
+        refreshDependencies()
+        self.smPreviewValue = nil
+    end
     option.onChangeApply = function(self, value)
         self[field] = value
         rebuildValues()
@@ -116,8 +136,8 @@ local function liveApply(option, field)
     end
 end
 
-local function addTick(options, id, translation)
-    local option = options:addTickBox(id, translation, Settings.DEFAULTS[id])
+local function addTick(options, id, translation, tooltip)
+    local option = options:addTickBox(id, translation, Settings.DEFAULTS[id], tooltip)
     liveApply(option, "value")
     return option
 end
@@ -128,49 +148,71 @@ function ModOptions.register()
     ModOptions.options = options
 
     options:addTitle("IGUI_SM_OptionsSectionGeneral")
-    addTick(options, "enabled", "IGUI_SM_OptionEnabled")
-    addTick(options, "preferNeatUI", "IGUI_SM_OptionPreferNeatUI")
-    options:addKeyBind("recallPanelKey", "IGUI_SM_OptionRecallPanelKey",
-        Keyboard and Keyboard.KEY_NONE or 0)
+    addTick(options, "enabled", "IGUI_SM_OptionEnabled", "IGUI_SM_OptionEnabledTooltip")
+    addTick(options, "preferNeatUI", "IGUI_SM_OptionPreferNeatUI",
+        "IGUI_SM_OptionPreferNeatUITooltip")
+    options:addKeyBind("recallPanelKey", getText("IGUI_SM_OptionRecallPanelKey"),
+        Keyboard and Keyboard.KEY_NONE or 0, "IGUI_SM_OptionRecallPanelKeyTooltip")
 
     options:addTitle("IGUI_SM_OptionsSectionBuilding")
-    addTick(options, "buildingMemoryEnabled", "IGUI_SM_OptionBuildingMemory")
-    addTick(options, "rememberRooms", "IGUI_SM_OptionRememberRooms")
-    addTick(options, "rememberContainers", "IGUI_SM_OptionRememberContainers")
-    addTick(options, "showStatusIndicator", "IGUI_SM_OptionShowStatusIndicator")
+    addTick(options, "buildingMemoryEnabled", "IGUI_SM_OptionBuildingMemory",
+        "IGUI_SM_OptionBuildingMemoryTooltip")
+    addTick(options, "rememberRooms", "IGUI_SM_OptionRememberRooms",
+        "IGUI_SM_OptionRememberRoomsTooltip")
+    addTick(options, "rememberContainers", "IGUI_SM_OptionRememberContainers",
+        "IGUI_SM_OptionRememberContainersTooltip")
+    addTick(options, "showStatusIndicator", "IGUI_SM_OptionShowStatusIndicator",
+        "IGUI_SM_OptionShowStatusIndicatorTooltip")
 
     options:addTitle("IGUI_SM_OptionsSectionPlaces")
-    addTick(options, "placesEnabled", "IGUI_SM_OptionPlaces")
-    addTick(options, "allowPlaceDesignations", "IGUI_SM_OptionAllowDesignations")
-    addTick(options, "hideIndicatorInSearchedPlaces", "IGUI_SM_OptionHideIndicatorSearchedPlaces")
+    addTick(options, "placesEnabled", "IGUI_SM_OptionPlaces", "IGUI_SM_OptionPlacesTooltip")
+    addTick(options, "allowPlaceDesignations", "IGUI_SM_OptionAllowDesignations",
+        "IGUI_SM_OptionAllowDesignationsTooltip")
+    addTick(options, "hideIndicatorInSearchedPlaces", "IGUI_SM_OptionHideIndicatorSearchedPlaces",
+        "IGUI_SM_OptionHideIndicatorSearchedPlacesTooltip")
 
     options:addTitle("IGUI_SM_OptionsSectionEmotional")
-    addTick(options, "emotionalMemoryEnabled", "IGUI_SM_OptionEmotionalMemory")
-    addTick(options, "emotionalReactionsEnabled", "IGUI_SM_OptionEmotionalReactions")
-    local reaction = options:addComboBox("emotionalReactionStrength", "IGUI_SM_OptionReactionStrength")
+    addTick(options, "emotionalMemoryEnabled", "IGUI_SM_OptionEmotionalMemory",
+        "IGUI_SM_OptionEmotionalMemoryTooltip")
+    addTick(options, "emotionalReactionsEnabled", "IGUI_SM_OptionEmotionalReactions",
+        "IGUI_SM_OptionEmotionalReactionsTooltip")
+    local reaction = options:addComboBox("emotionalReactionStrength", "IGUI_SM_OptionReactionStrength",
+        "IGUI_SM_OptionReactionStrengthTooltip")
     reaction:addItem("IGUI_SM_OptionReactionReduced", false)
     reaction:addItem("IGUI_SM_OptionReactionStandard", true)
     liveApply(reaction, "selected")
 
     options:addTitle("IGUI_SM_OptionsSectionImportant")
-    addTick(options, "importantMemoryEnabled", "IGUI_SM_OptionImportantMemory")
-    addTick(options, "rememberGenerators", "IGUI_SM_OptionRememberGenerators")
-    addTick(options, "rememberGasPumps", "IGUI_SM_OptionRememberGasPumps")
-    addTick(options, "rememberWoodStoves", "IGUI_SM_OptionRememberWoodStoves")
+    addTick(options, "importantMemoryEnabled", "IGUI_SM_OptionImportantMemory",
+        "IGUI_SM_OptionImportantMemoryTooltip")
+    addTick(options, "rememberGenerators", "IGUI_SM_OptionRememberGenerators",
+        "IGUI_SM_OptionRememberGeneratorsTooltip")
+    addTick(options, "rememberGasPumps", "IGUI_SM_OptionRememberGasPumps",
+        "IGUI_SM_OptionRememberGasPumpsTooltip")
+    addTick(options, "rememberWoodStoves", "IGUI_SM_OptionRememberWoodStoves",
+        "IGUI_SM_OptionRememberWoodStovesTooltip")
 
     options:addTitle("IGUI_SM_OptionsSectionVehicle")
-    addTick(options, "vehicleMemoryEnabled", "IGUI_SM_OptionVehicleMemory")
-    addTick(options, "rememberVehicleInteractions", "IGUI_SM_OptionVehicleInteractions")
+    addTick(options, "vehicleMemoryEnabled", "IGUI_SM_OptionVehicleMemory",
+        "IGUI_SM_OptionVehicleMemoryTooltip")
+    addTick(options, "rememberVehicleInteractions", "IGUI_SM_OptionVehicleInteractions",
+        "IGUI_SM_OptionVehicleInteractionsTooltip")
 
     options:addTitle("IGUI_SM_OptionsSectionWorldMap")
-    addTick(options, "worldMapOverlayEnabled", "IGUI_SM_OptionWorldMapOverlay")
-    addTick(options, "overlayVisibleByDefault", "IGUI_SM_OptionOverlayVisibleByDefault")
-    addTick(options, "showBuildingMarkers", "IGUI_SM_OptionShowBuildingMarkers")
-    addTick(options, "showPersonalPlaceMarkers", "IGUI_SM_OptionShowPersonalPlaceMarkers")
-    addTick(options, "showImportantMemoryMarkers", "IGUI_SM_OptionShowImportantMarkers")
-    addTick(options, "showVehicleMarkers", "IGUI_SM_OptionShowVehicleMarkers")
+    addTick(options, "worldMapOverlayEnabled", "IGUI_SM_OptionWorldMapOverlay",
+        "IGUI_SM_OptionWorldMapOverlayTooltip")
+    addTick(options, "overlayVisibleByDefault", "IGUI_SM_OptionOverlayVisibleByDefault",
+        "IGUI_SM_OptionOverlayVisibleByDefaultTooltip")
+    addTick(options, "showBuildingMarkers", "IGUI_SM_OptionShowBuildingMarkers",
+        "IGUI_SM_OptionShowBuildingMarkersTooltip")
+    addTick(options, "showPersonalPlaceMarkers", "IGUI_SM_OptionShowPersonalPlaceMarkers",
+        "IGUI_SM_OptionShowPersonalPlaceMarkersTooltip")
+    addTick(options, "showImportantMemoryMarkers", "IGUI_SM_OptionShowImportantMarkers",
+        "IGUI_SM_OptionShowImportantMarkersTooltip")
+    addTick(options, "showVehicleMarkers", "IGUI_SM_OptionShowVehicleMarkers",
+        "IGUI_SM_OptionShowVehicleMarkersTooltip")
     local markerSize = options:addSlider("markerSizePercent", "IGUI_SM_OptionMarkerSize",
-        75, 150, 5, Settings.DEFAULTS.markerSizePercent)
+        75, 150, 5, Settings.DEFAULTS.markerSizePercent, "IGUI_SM_OptionMarkerSizeTooltip")
     liveApply(markerSize, "value")
 
     ModOptions.registered = true

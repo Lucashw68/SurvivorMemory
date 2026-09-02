@@ -36,6 +36,25 @@ Survivor Memory enregistre donc ses options puis appelle une fois le loader B42
 au démarrage afin que les valeurs sauvegardées s'appliquent avant la création
 de l'UI.
 
+Chaque option expose un tooltip traduit. Lorsqu'une catégorie est décochée,
+ses options filles sont immédiatement grisées mais restent cochées : leur
+préférence est volontairement conservée pour une future réactivation. Leur
+effet runtime est néanmoins désactivé par la catégorie parente.
+
+## Particularités vérifiées de l'API B42
+
+Dans B42.20.4, le chemin `PZAPI.ModOptions` des raccourcis transmet
+`option.name` au dialogue vanilla, alors que son handler compare ensuite cette
+valeur au libellé déjà traduit. Fournir une clé de traduction brute entraîne
+`MainOptions.keyPressHandler: attempted index of non-table`. Survivor Memory
+fournit donc au keybind son libellé traduit, tout en conservant l'identifiant
+stable `recallPanelKey` pour la sauvegarde.
+
+Les dépendances visuelles utilisent `option.onChange`, appelé dès le clic, et
+la persistance/runtime utilise `option.onChangeApply` lors de l'application.
+Cela évite d'attendre la fermeture de l'écran pour griser les options filles,
+sans effacer leurs valeurs.
+
 ## Absence d'effacement
 
 Les options ne changent ni le schéma `MemoryStore`, ni le player ModData. Aucun
