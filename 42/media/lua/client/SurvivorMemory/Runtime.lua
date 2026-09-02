@@ -89,6 +89,25 @@ local function vehicleDisplayName(vehicle, script)
     return translated or tostring(name or script:getFullName() or getText("IGUI_SM_GenericVehicle"))
 end
 
+-- Match the overall-condition calculation displayed by B42's mechanics UI.
+-- Required but missing parts count as zero; hidden implementation details are
+-- sampled only when the player explicitly opens that UI.
+local function vehicleGeneralCondition(vehicle)
+    local total, count = 0, 0
+    for index = 0, vehicle:getPartCount() - 1 do
+        local part = vehicle:getPartByIndex(index)
+        if part then
+            local condition = part:getCondition()
+            local itemTypes = part:getItemType()
+            if itemTypes and not itemTypes:isEmpty() and not part:getInventoryItem() then
+                condition = 0
+            end
+            total, count = total + condition, count + 1
+        end
+    end
+    return count > 0 and total / count or nil
+end
+
 function Runtime.vehicleDescriptor(vehicle, reason)
     if not vehicle or not instanceof(vehicle, "BaseVehicle") then return nil end
     local square = vehicle:getSquare()
@@ -100,8 +119,6 @@ function Runtime.vehicleDescriptor(vehicle, reason)
         scriptName = vehicle:getScriptName() or script:getFullName() or script:getName(),
         displayName = vehicleDisplayName(vehicle, script),
         x = square:getX(), y = square:getY(), z = square:getZ(),
-        engineActivity = vehicle:isEngineRunning()
-            and VehicleMemory.EngineActivity.RUNNING or VehicleMemory.EngineActivity.OFF,
     }
     local fuelVisible = reason == "mechanics" or vehicle:isEngineRunning()
         or vehicle:isKeysInIgnition()
@@ -110,8 +127,10 @@ function Runtime.vehicleDescriptor(vehicle, reason)
         descriptor.fuelState = VehicleMemory.fuelState(
             gasTank:getContainerContentAmount(), gasTank:getContainerCapacity())
     end
-    local engine = reason == "mechanics" and vehicle:getPartById("Engine") or nil
-    if engine then descriptor.engineCondition = VehicleMemory.engineCondition(engine:getCondition()) end
+    if reason == "mechanics" then
+        descriptor.vehicleCondition = VehicleMemory.vehicleCondition(
+            vehicleGeneralCondition(vehicle), vehicle:isDriveable())
+    end
     local identity = VehicleMemory.identityFromFields(descriptor)
     return identity and descriptor or nil
 end

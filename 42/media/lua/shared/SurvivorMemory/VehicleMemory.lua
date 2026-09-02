@@ -9,8 +9,12 @@ VehicleMemory.FuelState = {
     SOME = "SOME",
     FULL = "FULL",
 }
-VehicleMemory.EngineActivity = { OFF = "OFF", RUNNING = "RUNNING" }
-VehicleMemory.EngineCondition = { FAILED = "FAILED", POOR = "POOR", USABLE = "USABLE" }
+VehicleMemory.VehicleCondition = {
+    FAILED = "FAILED",
+    POOR = "POOR",
+    USABLE = "USABLE",
+    PERFECT = "PERFECT",
+}
 
 local function integer(value)
     value = tonumber(value)
@@ -36,22 +40,13 @@ function VehicleMemory.fuelState(amount, capacity)
     return VehicleMemory.FuelState.SOME
 end
 
-function VehicleMemory.engineCondition(condition)
+function VehicleMemory.vehicleCondition(condition, operational)
     condition = tonumber(condition)
     if not condition then return nil end
-    if condition <= 0 then return VehicleMemory.EngineCondition.FAILED end
-    if condition < 30 then return VehicleMemory.EngineCondition.POOR end
-    return VehicleMemory.EngineCondition.USABLE
-end
-
-function VehicleMemory.engineSummary(observation)
-    if type(observation) ~= "table" then return nil end
-    if observation.engineActivity == VehicleMemory.EngineActivity.RUNNING then return "RUNNING" end
-    if validValue(VehicleMemory.EngineCondition, observation.engineCondition) then
-        return observation.engineCondition
-    end
-    if observation.engineActivity == VehicleMemory.EngineActivity.OFF then return "OFF" end
-    return nil
+    if operational == false then return VehicleMemory.VehicleCondition.FAILED end
+    if condition >= 90 then return VehicleMemory.VehicleCondition.PERFECT end
+    if condition < 40 then return VehicleMemory.VehicleCondition.POOR end
+    return VehicleMemory.VehicleCondition.USABLE
 end
 
 function VehicleMemory.identityFromFields(fields)
@@ -97,13 +92,14 @@ function VehicleMemory.sanitize(key, observation)
     observation.observedAt = observedAt
     observation.fuelState = validValue(VehicleMemory.FuelState, observation.fuelState)
     observation.fuelObservedAt = observation.fuelState and tonumber(observation.fuelObservedAt) or nil
-    observation.engineActivity = validValue(VehicleMemory.EngineActivity, observation.engineActivity)
-    observation.engineActivityObservedAt = observation.engineActivity
-        and tonumber(observation.engineActivityObservedAt) or nil
-    observation.engineCondition = validValue(VehicleMemory.EngineCondition,
-        observation.engineCondition)
-    observation.engineConditionObservedAt = observation.engineCondition
-        and tonumber(observation.engineConditionObservedAt) or nil
+    observation.vehicleCondition = validValue(VehicleMemory.VehicleCondition,
+        observation.vehicleCondition)
+    observation.vehicleConditionObservedAt = observation.vehicleCondition
+        and tonumber(observation.vehicleConditionObservedAt) or nil
+    -- These short-lived pre-release fields described only the engine. They must
+    -- not survive as if they represented the vehicle's overall condition.
+    observation.engineActivity, observation.engineActivityObservedAt = nil, nil
+    observation.engineCondition, observation.engineConditionObservedAt = nil, nil
     return observation
 end
 
@@ -149,15 +145,11 @@ function VehicleMemory.observe(root, descriptor, observedAt)
         observation.fuelState = fuelState
         observation.fuelObservedAt = observedAt
     end
-    local engineActivity = validValue(VehicleMemory.EngineActivity, descriptor.engineActivity)
-    if engineActivity then
-        observation.engineActivity = engineActivity
-        observation.engineActivityObservedAt = observedAt
-    end
-    local engineCondition = validValue(VehicleMemory.EngineCondition, descriptor.engineCondition)
-    if engineCondition then
-        observation.engineCondition = engineCondition
-        observation.engineConditionObservedAt = observedAt
+    local vehicleCondition = validValue(VehicleMemory.VehicleCondition,
+        descriptor.vehicleCondition)
+    if vehicleCondition then
+        observation.vehicleCondition = vehicleCondition
+        observation.vehicleConditionObservedAt = observedAt
     end
     root.vehicleMemories[identity.key] = observation
     return created, observation, previousKey

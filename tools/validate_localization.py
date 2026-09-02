@@ -19,7 +19,7 @@ DYNAMIC_PREFIXES = (
     "IGUI_SM_Place_",
     "IGUI_SM_Important_",
     "IGUI_SM_VehicleFuel_",
-    "IGUI_SM_VehicleEngine_",
+    "IGUI_SM_VehicleCondition_",
 )
 
 

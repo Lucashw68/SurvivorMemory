@@ -314,12 +314,14 @@ equal(VehicleMemory.fuelState(20, 40), VehicleMemory.FuelState.SOME,
 equal(VehicleMemory.fuelState(30, 40), VehicleMemory.FuelState.FULL,
     "three-quarter tank uses the broad full memory state")
 equal(VehicleMemory.fuelState(1, 0), nil, "invalid fuel capacity reveals nothing")
-equal(VehicleMemory.engineCondition(0), VehicleMemory.EngineCondition.FAILED,
-    "failed engine condition is remembered")
-equal(VehicleMemory.engineCondition(20), VehicleMemory.EngineCondition.POOR,
-    "badly damaged engine is remembered broadly")
-equal(VehicleMemory.engineCondition(70), VehicleMemory.EngineCondition.USABLE,
-    "usable engine avoids an exact condition value")
+equal(VehicleMemory.vehicleCondition(80, false), VehicleMemory.VehicleCondition.FAILED,
+    "non-operational vehicle is remembered as out of service")
+equal(VehicleMemory.vehicleCondition(20, true), VehicleMemory.VehicleCondition.POOR,
+    "badly damaged vehicle is remembered broadly")
+equal(VehicleMemory.vehicleCondition(70, true), VehicleMemory.VehicleCondition.USABLE,
+    "usable vehicle avoids an exact condition value")
+equal(VehicleMemory.vehicleCondition(95, true), VehicleMemory.VehicleCondition.PERFECT,
+    "excellent overall condition is remembered as near-perfect")
 
 local sqlVehicle = VehicleMemory.identityFromFields({
     sqlId = 81, mechanicalId = 12004, scriptName = "Base.CarNormal",
@@ -336,27 +338,25 @@ local vehicleCreated, vehicleObservation = VehicleMemory.observe(rootData, {
     sqlId = -1, mechanicalId = 12004, scriptName = "Base.CarNormal",
     displayName = "Chevalier Dart", x = 300, y = 401, z = 0,
     fuelState = VehicleMemory.FuelState.LOW,
-    engineActivity = VehicleMemory.EngineActivity.OFF,
-    engineCondition = VehicleMemory.EngineCondition.POOR,
+    vehicleCondition = VehicleMemory.VehicleCondition.POOR,
 }, 500)
 equal(vehicleCreated, true, "first significant vehicle observation creates memory")
 equal(vehicleObservation.observedAt, 500, "vehicle stores deterministic in-game time")
 equal(vehicleObservation.fuelState, VehicleMemory.FuelState.LOW,
     "vehicle stores broad observed fuel state")
-equal(vehicleObservation.engineCondition, VehicleMemory.EngineCondition.POOR,
-    "mechanics stores broad observed engine condition")
+equal(vehicleObservation.vehicleCondition, VehicleMemory.VehicleCondition.POOR,
+    "mechanics stores broad observed overall vehicle condition")
 local vehicleRefreshed, movedVehicle = VehicleMemory.observe(rootData, {
     sqlId = -1, mechanicalId = 12004, scriptName = "Base.CarNormal",
     displayName = "Chevalier Dart", x = 350, y = 451, z = 0,
-    engineActivity = VehicleMemory.EngineActivity.RUNNING,
 }, 524)
 equal(vehicleRefreshed, false, "repeat vehicle observation updates one memory")
 equal(movedVehicle.x, 350, "vehicle remembers latest observed position only")
 equal(movedVehicle.observedAt, 524, "vehicle last-seen time refreshes on observation")
 equal(movedVehicle.fuelState, VehicleMemory.FuelState.LOW,
     "less detailed revisit preserves last legitimate fuel memory")
-equal(VehicleMemory.engineSummary(movedVehicle), "RUNNING",
-    "running engine takes precedence in the remembered summary")
+equal(movedVehicle.vehicleCondition, VehicleMemory.VehicleCondition.POOR,
+    "less detailed revisit preserves last mechanics assessment")
 equal(#VehicleMemory.all(rootData), 1, "vehicle memory has no route history")
 local promotedVehicle, promotedObservation, replacedKey = VehicleMemory.observe(rootData, {
     sqlId = 81, mechanicalId = 12004, scriptName = "Base.CarNormal",
@@ -365,8 +365,8 @@ local promotedVehicle, promotedObservation, replacedKey = VehicleMemory.observe(
 equal(promotedVehicle, false, "SQL assignment promotes existing fallback without duplicate")
 equal(replacedKey, mechanicalVehicle.key, "fallback vehicle key is replaced after SQL assignment")
 equal(promotedObservation.vehicleKey, sqlVehicle.key, "promoted vehicle uses persistent SQL key")
-equal(promotedObservation.engineCondition, VehicleMemory.EngineCondition.POOR,
-    "identity promotion preserves mechanical observations")
+equal(promotedObservation.vehicleCondition, VehicleMemory.VehicleCondition.POOR,
+    "identity promotion preserves overall-condition observations")
 equal(#VehicleMemory.all(rootData), 1, "identity promotion keeps one vehicle memory")
 local vehicleReload = MemoryStore.migrate(deepCopy(rootData))
 equal(vehicleReload.vehicleMemories[sqlVehicle.key].observedAt, 525,
@@ -375,10 +375,11 @@ equal(vehicleReload.vehicleMemories[sqlVehicle.key].fuelState, VehicleMemory.Fue
     "qualitative vehicle details survive serialization")
 local sanitizedVehicleDetail = VehicleMemory.sanitize("vehicle:sql:82", {
     sqlId = 82, scriptName = "Base.CarNormal", x = 1, y = 2, z = 0, observedAt = 3,
-    fuelState = "EXACT_PERCENTAGE", engineCondition = "PERFECT",
+    fuelState = "EXACT_PERCENTAGE", vehicleCondition = "EXACT_PERCENTAGE",
 })
 equal(sanitizedVehicleDetail.fuelState, nil, "unknown fuel state is discarded safely")
-equal(sanitizedVehicleDetail.engineCondition, nil, "unknown engine state is discarded safely")
+equal(sanitizedVehicleDetail.vehicleCondition, nil,
+    "unknown vehicle condition is discarded safely")
 local migratedVehicles = MemoryStore.migrate({ schemaVersion = 4, buildings = {}, debug = {} })
 equal(migratedVehicles.schemaVersion, 5, "v4 store migrates to v5")
 equal(type(migratedVehicles.vehicleMemories), "table", "v5 migration creates vehicle collection")

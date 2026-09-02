@@ -27,7 +27,8 @@ vehicle: when entering it, inspecting its mechanics, or leaving it. The World
 Map marker is a last-seen position, never live tracking; driving does not record
 a route or continuously update the memory. It also keeps broad observations
 such as an empty, low, partly filled, or apparently full tank; whether the
-engine was running; and a rough engine condition after a mechanics inspection.
+vehicle looked roadworthy, in excellent condition, badly damaged, or out of
+service after a mechanics inspection.
 It never stores exact remote telemetry.
 
 The mod never scans the world for hidden knowledge. Memories are personal and

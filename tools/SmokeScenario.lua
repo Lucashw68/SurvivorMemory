@@ -174,22 +174,31 @@ local function onTick()
             "sql=" .. tostring(descriptor and descriptor.sqlId)
                 .. " mechanical=" .. tostring(descriptor and descriptor.mechanicalId))
         if Runner.vehicle then
+            for index = 0, Runner.vehicle:getPartCount() - 1 do
+                local part = Runner.vehicle:getPartByIndex(index)
+                if part then part:setCondition(20) end
+            end
             local gasTank = Runner.vehicle:getPartById("GasTank")
             local engine = Runner.vehicle:getPartById("Engine")
             if gasTank and gasTank:getContainerCapacity() > 0 then
                 gasTank:setContainerContentAmount(gasTank:getContainerCapacity() * 0.10)
             end
+            -- Keep the badly damaged fixture driveable so this validates POOR,
+            -- while deterministic tests cover the FAILED override separately.
             if engine then engine:setCondition(20) end
             check(SurvivorMemory.Runtime.observeVehicle(player, Runner.vehicle, "mechanics"),
                 "vehicle_remembered_on_mechanics")
             local mechanicsMemory = SurvivorMemory.VehicleMemory.all(outdoorRoot)[1]
             check(mechanicsMemory
                     and mechanicsMemory.fuelState == SurvivorMemory.VehicleMemory.FuelState.LOW,
-                "vehicle_mechanics_remembers_broad_fuel_state")
+                "vehicle_mechanics_remembers_broad_fuel_state",
+                "value=" .. tostring(mechanicsMemory and mechanicsMemory.fuelState))
             check(mechanicsMemory
-                    and mechanicsMemory.engineCondition
-                        == SurvivorMemory.VehicleMemory.EngineCondition.POOR,
-                "vehicle_mechanics_remembers_broad_engine_condition")
+                    and mechanicsMemory.vehicleCondition
+                        == SurvivorMemory.VehicleMemory.VehicleCondition.POOR,
+                "vehicle_mechanics_remembers_broad_overall_condition",
+                "value=" .. tostring(mechanicsMemory and mechanicsMemory.vehicleCondition)
+                    .. " driveable=" .. tostring(Runner.vehicle:isDriveable()))
             Runner.vehicle:enter(0, player)
             triggerEvent("OnEnterVehicle", player)
             check(#SurvivorMemory.VehicleMemory.all(outdoorRoot) == 1,

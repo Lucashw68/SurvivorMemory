@@ -53,22 +53,30 @@ case, niveau et heure in-game. Elle peut aussi conserver des observations
 qualitatives :
 
 - carburant `EMPTY`, `LOW`, `SOME` ou `FULL`, sans quantité exacte ;
-- moteur en marche ou arrêté lors de la dernière interaction ;
-- état moteur `FAILED`, `POOR` ou `USABLE` après ouverture de la mécanique.
+- état général `FAILED`, `POOR`, `USABLE` ou `PERFECT` après ouverture de la
+  mécanique.
 
 Le seuil `LOW` reprend l'alerte de jauge vanilla sous 15 %. `FULL` commence à
 75 %, seuil déjà employé par `Vehicles.CheckEngine.GasTankFull`; l'UI emploie
-donc une formulation prudente (« semblait plein »). La condition moteur reste
-une catégorie grossière et jamais le pourcentage B42.
+donc une formulation prudente (« semblait plein »).
+
+L'état général reprend le calcul de l'interface mécanique B42 : moyenne de
+l'état de toutes les pièces, avec une pièce requise absente comptée à zéro.
+`BaseVehicle:isDriveable()` distingue en plus un véhicule hors service : cette
+méthode B42 exige à la fois un moteur fonctionnel et les contrôles opérationnels
+définis par les pièces. Le
+résultat n'est conservé que sous forme grossière : hors service si B42 le juge
+non opérationnel, très endommagé sous 40 %, en état de rouler entre 40 et 89 %,
+et en parfait état à partir de 90 %. Le pourcentage brut n'est jamais persisté.
 
 Le carburant est lu lors de l'inspection mécanique, ou depuis le tableau de
 bord lorsqu'il est légitimement alimenté (moteur en marche ou clés au contact).
-La condition moteur n'est lue que pour l'action explicite « Inspect Mechanics ».
+L'état général n'est calculé que pour l'action explicite « Inspect Mechanics ».
 Une interaction moins détaillée ne supprime pas la dernière observation
 légitime.
 
-La mémoire ne contient toujours ni valeur exacte de carburant ou de moteur, ni
-batterie, pneus, coffre ou position actuelle distante.
+La mémoire ne contient toujours ni valeur exacte de carburant ou de condition,
+ni état détaillé de batterie, pneus, coffre ou position actuelle distante.
 
 L'entrée, la mécanique et la sortie sont des interactions significatives. La
 conduite ne déclenche aucun enregistrement continu : aucune route et aucun
@@ -78,7 +86,7 @@ historique de positions ne sont construits.
 
 L'overlay dessine l'icône véhicule dédiée
 `media/ui/SurvivorMemory/map-vehicle-marker.png` à `x/y/z` mémorisé et un
-tooltip avec le nom, les grandes lignes carburant/moteur disponibles et « Last
+tooltip avec le nom, les grandes lignes carburant/état général disponibles et « Last
 seen ». L'icône runtime 64×64 dérive par recadrage
 et réduction Lanczos de l'artwork fourni, dont le canal alpha est conservé. Le
 rendu ne crée aucun symbole vanilla persistant. Il suit le toggle Survivor Memory et le cache est

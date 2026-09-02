@@ -79,7 +79,7 @@ These memories always say [i]last seen here[/i], never [i]still here[/i]. See on
 
 [h2]Vehicle Memory[/h2]
 Remember where your survivor last meaningfully encountered a vehicle: when entering it, inspecting its mechanics, or getting out.
-Mechanics inspections and readable dashboard information leave broad memories too: an empty, low, partly filled, or apparently full tank; a running engine; or an engine that looked broken, badly damaged, or usable. No suspiciously perfect percentages.
+Mechanics inspections and readable dashboard information leave broad memories too: an empty, low, partly filled, or apparently full tank; and whether the vehicle looked roadworthy, in excellent condition, badly damaged, or out of service. No suspiciously perfect percentages.
 The map marker shows where the vehicle was last seen. It is not live GPS, does not record your route, and does not know if somebody moved the car while you were gone.
 Because “where did I leave the car?” is apparently still a problem after civilization ends.
 
@@ -128,7 +128,7 @@ Turning something off never erases your character's existing memories. They simp
 [*]Personal Home and Outpost designations with distinct map markers.
 [*]Rare Emotional Memories from exceptionally severe experiences.
 [*]Last-seen memories for selected generators, gas pumps, and wood stoves.
-[*]Last-seen vehicle positions and broad observed fuel/engine details, with no live tracking.
+[*]Last-seen vehicle positions and broad observed fuel/condition details, with no live tracking.
 [*]Native Build 42 mod options for every major feature and map category.
 [/list]
 
