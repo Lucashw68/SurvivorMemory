@@ -340,6 +340,16 @@ local function onTick()
         local ok, err = pcall(function() getCore():TakeFullScreenshot("survivor-memory-panel.png") end)
         check(ok, "memory_panel_screenshot", "error=" .. tostring(err))
         SurvivorMemory.MemoryPanel.open(0)
+        local memory, root = SurvivorMemory.Runtime.currentMemory(0)
+        Runner.duplicateBuildingKey = memory and (memory.buildingKey .. ":historical-smoke") or nil
+        if root and memory and Runner.duplicateBuildingKey then
+            root.buildings[Runner.duplicateBuildingKey] = SurvivorMemory.MemoryStore.newBuilding({
+                key = Runner.duplicateBuildingKey,
+                centerX = memory.centerX,
+                centerY = memory.centerY,
+            }, memory.firstVisited)
+            root.revision = (tonumber(root.revision) or 0) + 1
+        end
         getCore():setOptionMapViewPause(false)
         ISWorldMap.ShowWorldMap(0, Runner.fixture.rooms[1]:getX(), Runner.fixture.rooms[1]:getY(), 18)
         Runner.phase, Runner.tick = 45, 0
@@ -352,6 +362,9 @@ local function onTick()
         check(ISWorldMap.instance and ISWorldMap.instance.smMemoryMarkerCache
                 and #ISWorldMap.instance.smMemoryMarkerCache.vehicles == 1,
             "vehicle_last_seen_marker_cached")
+        check(ISWorldMap.instance and ISWorldMap.instance.smMemoryMarkerCache
+                and #ISWorldMap.instance.smMemoryMarkerCache.markers == 1,
+            "personal_place_replaces_duplicate_building_marker")
         check(getTexture("media/ui/SurvivorMemory/map-vehicle-marker.png") ~= nil,
             "vehicle_marker_texture_loaded")
         local memory = SurvivorMemory.Runtime.currentMemory(0)
@@ -391,6 +404,11 @@ local function onTick()
         check(ok, "world_map_overlay_screenshot", "error=" .. tostring(err))
         local memory = SurvivorMemory.Runtime.currentMemory(0)
         SurvivorMemory.Runtime.setPlaceDesignation(0, memory.buildingKey, SurvivorMemory.PlaceDesignation.HOME)
+        local root = select(2, SurvivorMemory.Runtime.currentMemory(0))
+        if root and Runner.duplicateBuildingKey then
+            root.buildings[Runner.duplicateBuildingKey] = nil
+            root.revision = (tonumber(root.revision) or 0) + 1
+        end
         if Runner.mapContext then Runner.mapContext:closeAll() end
         if ISWorldMap.instance then ISWorldMap.instance:close() end
         moveTo(player, Runner.fixture.outside)

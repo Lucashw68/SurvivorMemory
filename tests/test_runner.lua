@@ -18,6 +18,7 @@ local ImportantMemory = require "SurvivorMemory/ImportantMemory"
 local VehicleMemory = require "SurvivorMemory/VehicleMemory"
 local VisibleObservation = require "SurvivorMemory/VisibleObservation"
 local Settings = require "SurvivorMemory/Settings"
+local BuildingMarkerSelection = require "SurvivorMemory/BuildingMarkerSelection"
 function getText(key, value)
     if value == nil then return key end
     return key .. ":" .. tostring(value)
@@ -304,6 +305,29 @@ equal(Settings.reactionMultiplier({ emotionalReactionStrength = 2 }), 1,
 equal(Settings.markerScale({ markerSizePercent = 50 }), 0.75, "map marker scale has safe minimum")
 equal(Settings.markerScale({ markerSizePercent = 125 }), 1.25, "map marker scale uses percentage")
 equal(Settings.markerScale({ markerSizePercent = 200 }), 1.5, "map marker scale has safe maximum")
+
+local plainMarker = {
+    buildingKey = "b1:100:200:110:212:0:1", centerX = 105, centerY = 206,
+    lastVisited = 200, placeDesignation = PlaceDesignation.NONE,
+}
+local homeMarker = {
+    buildingKey = "b1:100:200:111:212:0:1", centerX = 105, centerY = 206,
+    lastVisited = 150, placeDesignation = PlaceDesignation.HOME,
+}
+local otherMarker = {
+    buildingKey = "b1:120:200:130:212:0:1", centerX = 125, centerY = 206,
+    lastVisited = 210, placeDesignation = PlaceDesignation.NONE,
+}
+local selectedMarkers = BuildingMarkerSelection.select({
+    plain = plainMarker, home = homeMarker, other = otherMarker,
+})
+equal(#selectedMarkers, 2, "map coalesces historical memories at one building center")
+truthy(selectedMarkers[1] == homeMarker or selectedMarkers[2] == homeMarker,
+    "personal place marker replaces duplicate standard memory marker")
+truthy(selectedMarkers[1] == otherMarker or selectedMarkers[2] == otherMarker,
+    "different building center retains its marker")
+equal(#BuildingMarkerSelection.select({ invalid = { buildingKey = "bad" } }), 0,
+    "map ignores memories without marker coordinates")
 
 equal(VehicleMemory.fuelState(0, 40), VehicleMemory.FuelState.EMPTY,
     "empty vehicle tank is remembered qualitatively")

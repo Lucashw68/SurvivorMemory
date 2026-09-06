@@ -32,6 +32,11 @@ la corriger à l'insu du personnage.
 
 ## Maintenance du produit actuel
 
+- **Corrigé le 6 septembre 2026 :** l'overlay World Map déduplique les mémoires
+  historiques qui désignent le même centre de bâtiment. Un marqueur personnel
+  `HOME` ou `OUTPOST` remplace alors la disquette standard sans supprimer ni
+  fusionner silencieusement les données persistées. Régression couverte par les
+  tests déterministes et les smokes B42 NeatUI/vanilla avec save/reload.
 - **Livré le 1er septembre 2026 (1.6.0) :** options natives B42 sous
   `Options → Mods`. Chaque module peut être désactivé personnellement sans
   effacer ses souvenirs; filtres de carte, taille des marqueurs, indicateur,

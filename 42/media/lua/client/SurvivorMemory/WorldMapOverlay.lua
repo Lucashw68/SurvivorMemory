@@ -9,6 +9,7 @@ require "SurvivorMemory/StatusPresentation"
 require "SurvivorMemory/PlaceDesignation"
 require "SurvivorMemory/ImportantMemory"
 require "SurvivorMemory/VehicleMemory"
+require "SurvivorMemory/BuildingMarkerSelection"
 require "SurvivorMemory/ModOptions"
 
 SurvivorMemory = SurvivorMemory or {}
@@ -24,6 +25,7 @@ local PlaceDesignation = SurvivorMemory.PlaceDesignation
 local Runtime = SurvivorMemory.Runtime
 local ImportantMemory = SurvivorMemory.ImportantMemory
 local VehicleMemory = SurvivorMemory.VehicleMemory
+local BuildingMarkerSelection = SurvivorMemory.BuildingMarkerSelection
 local ModOptions = SurvivorMemory.ModOptions
 
 local ICON_PATHS = {
@@ -81,13 +83,7 @@ local function markersFor(map, root)
     local revision = tonumber(root.revision) or 0
     local cache = map.smMemoryMarkerCache
     if cache and cache.root == root and cache.revision == revision then return cache.markers end
-    local markers = {}
-    for _, memory in pairs(root.buildings or {}) do
-        if tonumber(memory.centerX) and tonumber(memory.centerY) then
-            table.insert(markers, memory)
-        end
-    end
-    table.sort(markers, function(a, b) return tostring(a.buildingKey) < tostring(b.buildingKey) end)
+    local markers = BuildingMarkerSelection.select(root.buildings)
     map.smMemoryMarkerCache = {
         root = root,
         revision = revision,

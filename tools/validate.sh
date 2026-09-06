@@ -18,7 +18,7 @@ same_asset() {
 }
 
 for required in \
-    BuildingIdentity ContainerIdentity MemoryStore TimeFormat VisitSession LocationName StatusPresentation PlaceDesignation EmotionalMemory ImportantMemory VehicleMemory VisibleObservation Settings; do
+    BuildingIdentity ContainerIdentity MemoryStore TimeFormat VisitSession LocationName StatusPresentation PlaceDesignation EmotionalMemory ImportantMemory VehicleMemory VisibleObservation Settings BuildingMarkerSelection; do
     [ -f "$root_dir/42/media/lua/shared/SurvivorMemory/$required.lua" ] \
         || fail "module partagé absent: $required"
 done
