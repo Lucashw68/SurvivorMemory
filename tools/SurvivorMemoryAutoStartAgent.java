@@ -64,9 +64,11 @@ public final class SurvivorMemoryAutoStartAgent {
             Object buildings = rawget(root, "buildings");
             Object memory = firstValue(buildings);
             Object vehicleMemories = rawget(root, "vehicleMemories");
-            boolean pass = ((Number) schema).intValue() == 5
+            Object vehicleMemory = firstValue(vehicleMemories);
+            boolean pass = ((Number) schema).intValue() == 6
                 && count(buildings) == 1
                 && count(vehicleMemories) == 1
+                && Boolean.TRUE.equals(rawget(vehicleMemory, "personal"))
                 && ((Number) rawget(memory, "visitCount")).intValue() == 2
                 && count(rawget(memory, "roomsKnown")) == 2
                 && count(rawget(memory, "containersInspected")) == 2

@@ -29,7 +29,9 @@ a route or continuously update the memory. It also keeps broad observations
 such as an empty, low, partly filled, or apparently full tank; whether the
 vehicle looked roadworthy, in excellent condition, badly damaged, or out of
 service after a mechanics inspection.
-It never stores exact remote telemetry.
+It can also mark a remembered vehicle as personal from the nearby context menu
+or its map marker, while deliberately keeping the same vehicle icon. It never
+stores exact remote telemetry.
 
 The mod never scans the world for hidden knowledge. Memories are personal and
 may become outdated, just like the survivor who formed them. NeatUI Framework

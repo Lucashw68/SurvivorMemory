@@ -194,8 +194,11 @@ local function onTick()
             -- Keep the badly damaged fixture driveable so this validates POOR,
             -- while deterministic tests cover the FAILED override separately.
             if engine then engine:setCondition(20) end
-            check(SurvivorMemory.Runtime.observeVehicle(player, Runner.vehicle, "mechanics"),
-                "vehicle_remembered_on_mechanics")
+            local mechanicsBefore = outdoorRoot.debug.vehicleObservations_mechanics or 0
+            local mechanicsAction = ISOpenMechanicsUIAction:new(player, Runner.vehicle)
+            mechanicsAction:perform()
+            check((outdoorRoot.debug.vehicleObservations_mechanics or 0) == mechanicsBefore + 1,
+                "vehicle_remembered_when_mechanics_ui_opens")
             local mechanicsMemory = SurvivorMemory.VehicleMemory.all(outdoorRoot)[1]
             check(mechanicsMemory
                     and mechanicsMemory.fuelState == SurvivorMemory.VehicleMemory.FuelState.LOW,
@@ -207,6 +210,25 @@ local function onTick()
                 "vehicle_mechanics_remembers_broad_overall_condition",
                 "value=" .. tostring(mechanicsMemory and mechanicsMemory.vehicleCondition)
                     .. " driveable=" .. tostring(Runner.vehicle:isDriveable()))
+            local mechanicsUI = getPlayerMechanicsUI(player:getPlayerNum())
+            if mechanicsUI and mechanicsUI:isReallyVisible() then mechanicsUI:close() end
+            local localVehicleContext = ISContextMenu.get(0, 100, 100)
+            check(SurvivorMemory.MemoryPanel.addVehicleContextOption(
+                0, localVehicleContext, Runner.vehicle),
+                "nearby_vehicle_personal_action_added")
+            local markPersonalNearby = localVehicleContext:getOptionFromName(
+                getText("IGUI_SM_VehicleMarkPersonal"))
+            check(markPersonalNearby ~= nil, "nearby_vehicle_mark_personal_action_available")
+            if markPersonalNearby then
+                markPersonalNearby.onSelect(markPersonalNearby.target,
+                    markPersonalNearby.param1, markPersonalNearby.param2)
+            end
+            check(mechanicsMemory.personal == true,
+                "nearby_vehicle_personal_action_applied")
+            localVehicleContext:closeAll()
+            check(SurvivorMemory.Runtime.setVehiclePersonal(
+                0, mechanicsMemory.vehicleKey, false),
+                "personal_vehicle_can_be_cleared_before_map_test")
             Runner.vehicle:enter(0, player)
             triggerEvent("OnEnterVehicle", player)
             check(#SurvivorMemory.VehicleMemory.all(outdoorRoot) == 1,
@@ -367,6 +389,26 @@ local function onTick()
             "personal_place_replaces_duplicate_building_marker")
         check(getTexture("media/ui/SurvivorMemory/map-vehicle-marker.png") ~= nil,
             "vehicle_marker_texture_loaded")
+        local vehicleObservation = ISWorldMap.instance.smMemoryMarkerCache.vehicles[1]
+        local vehicleMarkerX = vehicleObservation
+            and ISWorldMap.instance.mapAPI:worldToUIX(vehicleObservation.x, vehicleObservation.y)
+        local vehicleMarkerY = vehicleObservation
+            and ISWorldMap.instance.mapAPI:worldToUIY(vehicleObservation.x, vehicleObservation.y)
+        local vehicleHit = vehicleMarkerX and SurvivorMemory.WorldMapOverlay.vehicleAt(
+            ISWorldMap.instance, vehicleMarkerX, vehicleMarkerY) or nil
+        check(vehicleHit == vehicleObservation, "world_map_vehicle_marker_hit_test")
+        local vehicleContextOpened = vehicleHit
+            and ISWorldMap.instance:onRightMouseUp(vehicleMarkerX, vehicleMarkerY)
+        check(vehicleContextOpened == true, "world_map_vehicle_context_opened")
+        local vehicleContext = getPlayerContextMenu and getPlayerContextMenu(0) or nil
+        local markPersonal = vehicleContext
+            and vehicleContext:getOptionFromName(getText("IGUI_SM_VehicleMarkPersonal")) or nil
+        check(markPersonal ~= nil, "world_map_mark_personal_vehicle_action_available")
+        if markPersonal then
+            markPersonal.onSelect(markPersonal.target, markPersonal.param1, markPersonal.param2)
+        end
+        check(vehicleObservation.personal == true, "world_map_personal_vehicle_action_applied")
+        if vehicleContext then vehicleContext:closeAll() end
         local memory = SurvivorMemory.Runtime.currentMemory(0)
         local markerX = ISWorldMap.instance and memory
             and ISWorldMap.instance.mapAPI:worldToUIX(memory.centerX, memory.centerY)

@@ -6,7 +6,7 @@ Les investigations et campagnes qui ne décrivent plus l'état courant peuvent
 ## Architecture et APIs B42
 
 - `b42-memory-api-audit.md` : APIs bâtiment, persistance et World Map ;
-- `persistence-and-multiplayer.md` : format v5 et propriété par personnage ;
+- `persistence-and-multiplayer.md` : format v6 et propriété par personnage ;
 - `character-memory-semantics.md` : mort, respawn et isolation des souvenirs ;
 - `neatui-audit.md` : intégration optionnelle et fallback vanilla.
 

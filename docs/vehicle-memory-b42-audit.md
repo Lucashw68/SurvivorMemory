@@ -35,16 +35,19 @@ Validé en jeu sur deux fixtures `Base.CarNormal` : SQL ID `1`, mechanical IDs
   `OnExitVehicle`. Le handler doit donc conserver la référence locale acquise à
   l'entrée. Survivor Memory l'efface immédiatement après l'observation de
   sortie.
-- `ISVehicleMenu.onMechanic(playerObj, vehicle)` fournit directement les deux
-  objets au moment où le joueur demande réellement la mécanique. Le wrapper
-  appelle l'original et ne modifie pas l'action vanilla.
+- Les chemins radial et raccourci `E` ne convergent pas dans
+  `ISVehicleMenu.onMechanic`: devant le capot, `E` passe par
+  `ISVehicleMenu.onOpenDoor`. Les deux programment toutefois
+  `ISOpenMechanicsUIAction`. Survivor Memory observe à la fin de son
+  `perform()`, lorsque l'interface mécanique s'est réellement ouverte. Une
+  action annulée avant ce point n'est pas mémorisée.
 - Après reload alors que le personnage est déjà assis, une observation unique
   `resume` reconstruit la session. Elle ne se répète pas par frame.
 
 Les événements entrée/sortie et la résolution d'identité ont été validés en jeu
-avec un vrai `BaseVehicle`. Le chemin mécanique est vérifié contre le Lua B42 et
-par validation statique, mais n'a pas encore été cliqué manuellement pendant le
-smoke automatisé.
+avec un vrai `BaseVehicle`. Le chemin mécanique commun est vérifié contre le Lua
+B42; les deux interactions restent à confirmer manuellement en jeu après
+installation de cette correction.
 
 ## Données retenues
 
@@ -82,12 +85,19 @@ L'entrée, la mécanique et la sortie sont des interactions significatives. La
 conduite ne déclenche aucun enregistrement continu : aucune route et aucun
 historique de positions ne sont construits.
 
+Un véhicule peut être marqué ou démarqué comme personnel depuis son menu
+contextuel local ou par clic droit sur son marqueur mémoire. Cette action reste
+propre au personnage. Sur un véhicule encore inconnu, elle crée uniquement une
+observation de présence à l'endroit visible; elle ne lit ni carburant ni état
+mécanique.
+
 ## World Map
 
 L'overlay dessine l'icône véhicule dédiée
 `media/ui/SurvivorMemory/map-vehicle-marker.png` à `x/y/z` mémorisé et un
 tooltip avec le nom, les grandes lignes carburant/état général disponibles et « Last
-seen ». L'icône runtime 64×64 dérive par recadrage
+seen ». La désignation personnelle ajoute un libellé mais conserve exactement
+la même icône et reste soumise au filtre véhicule existant. L'icône runtime 64×64 dérive par recadrage
 et réduction Lanczos de l'artwork fourni, dont le canal alpha est conservé. Le
 rendu ne crée aucun symbole vanilla persistant. Il suit le toggle Survivor Memory et le cache est
 invalidé seulement lorsque la révision du store personnel change.

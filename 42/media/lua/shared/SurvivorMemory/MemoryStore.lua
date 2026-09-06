@@ -12,7 +12,7 @@ local PlaceDesignation = SurvivorMemory.PlaceDesignation
 local EmotionalMemory = SurvivorMemory.EmotionalMemory
 local ImportantMemory = SurvivorMemory.ImportantMemory
 local VehicleMemory = SurvivorMemory.VehicleMemory
-MemoryStore.SCHEMA_VERSION = 5
+MemoryStore.SCHEMA_VERSION = 6
 MemoryStore.MOD_DATA_KEY = "SurvivorMemory"
 MemoryStore.Status = {
     VISITED = "VISITED",
@@ -88,6 +88,10 @@ function MemoryStore.migrate(raw)
         raw.vehicleMemories = raw.vehicleMemories or {}
         raw.schemaVersion = 5
         version = 5
+    end
+    if version == 5 then
+        raw.schemaVersion = 6
+        version = 6
     end
     if version ~= MemoryStore.SCHEMA_VERSION then
         error("Unsupported Survivor Memory schema: " .. tostring(version))

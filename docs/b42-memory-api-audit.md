@@ -96,7 +96,7 @@ fichier personnage en solo et reste propre au personnage. En client MP,
 implicitement les souvenirs.
 
 Les tables Lua sérialisables sont supportées; références Java, fonctions et
-metatables ne sont jamais persistées. Le format courant a `schemaVersion = 5`
+metatables ne sont jamais persistées. Le format courant a `schemaVersion = 6`
 et une fonction de migration centrale. La v2 ajoute la désignation personnelle;
 la v3 ajoute le souvenir émotionnel optionnel.
 

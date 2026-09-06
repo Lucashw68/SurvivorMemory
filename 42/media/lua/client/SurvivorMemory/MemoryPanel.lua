@@ -196,14 +196,35 @@ function MemoryPanel.open(playerNum)
     return panel
 end
 
+local function clickedVehicle(player)
+    if player and player:getVehicle() then return player:getVehicle() end
+    if IsoObjectPicker and IsoObjectPicker.Instance then
+        return IsoObjectPicker.Instance:PickVehicle(getMouseXScaled(), getMouseYScaled())
+    end
+    return nil
+end
+
+function MemoryPanel.addVehicleContextOption(playerNum, context, vehicle)
+    if not vehicle or not ModOptions.enabled("vehicleMemory") then return false end
+    local observation = SurvivorMemory.Runtime.vehicleMemoryFor(playerNum, vehicle)
+    local personal = observation and observation.personal == true
+    context:addOption(getText(personal and "IGUI_SM_VehicleClearPersonal"
+        or "IGUI_SM_VehicleMarkPersonal"), playerNum,
+        SurvivorMemory.Runtime.setVehiclePersonalFromVehicle, vehicle, not personal)
+    return true
+end
+
 function MemoryPanel.onWorldContextMenu(playerNum, context, worldObjects, test)
     if test and ISWorldObjectContextMenu.Test then return true end
     local player = getSpecificPlayer(playerNum)
+    local vehicle = clickedVehicle(player)
     local square = player and player:getCurrentSquare() or nil
-    if not square or not square:getBuilding() then return end
-    local memory = SurvivorMemory.Runtime.currentMemory(playerNum)
-    if not memory then return end
+    local memory = square and square:getBuilding()
+        and SurvivorMemory.Runtime.currentMemory(playerNum) or nil
+    if not vehicle and not memory then return end
     if test then return ISWorldObjectContextMenu.setTest() end
+    MemoryPanel.addVehicleContextOption(playerNum, context, vehicle)
+    if not memory then return end
     context:addOption(getText("IGUI_SM_RememberAction"), playerNum, MemoryPanel.open)
     if ModOptions.enabled("placeDesignations") then
         local designationOption = context:addOption(getText("IGUI_SM_PlaceAction"))

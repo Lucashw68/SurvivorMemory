@@ -32,4 +32,4 @@ Preuve brute :
 
 La persistance après reconnexion n'a pas été rejouée dans cette exécution
 ciblée; elle reste couverte par les validations MP antérieures du mod et par le
-cycle save/reload réel pour le format v5.
+cycle save/reload réel pour le format v6.

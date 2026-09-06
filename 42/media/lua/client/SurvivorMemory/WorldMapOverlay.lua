@@ -125,6 +125,25 @@ function Overlay.memoryAt(map, mouseX, mouseY)
     return closest
 end
 
+function Overlay.vehicleAt(map, mouseX, mouseY)
+    if not ModOptions.enabled("vehicleMarkers") or map.smMemoryOverlayEnabled == false
+            or not map.character or not map.mapAPI then return nil end
+    local root = MemoryStore.forModData(map.character:getModData())
+    local size = math.max(18, math.floor(baseMarkerSize(map) * 1.05))
+    local closest, closestDistance
+    for _, observation in ipairs(vehicleMarkersFor(map, root)) do
+        local x = map.mapAPI:worldToUIX(observation.x, observation.y)
+        local y = map.mapAPI:worldToUIY(observation.x, observation.y)
+        local dx, dy = mouseX - x, mouseY - y
+        local distance = dx * dx + dy * dy
+        local radius = size / 2 + 3
+        if distance <= radius * radius and (not closestDistance or distance < closestDistance) then
+            closest, closestDistance = observation, distance
+        end
+    end
+    return closest
+end
+
 function Overlay.showPlaceContextMenu(map, memory, x, y)
     if not ModOptions.enabled("placeDesignations")
             or not map or not memory or not map.character then return false end
@@ -141,6 +160,17 @@ function Overlay.showPlaceContextMenu(map, memory, x, y)
             Runtime.setPlaceDesignation, memory.buildingKey, choice[1])
         context:setOptionChecked(option, current == choice[1])
     end
+    return true
+end
+
+function Overlay.showVehicleContextMenu(map, observation, x, y)
+    if not map or not observation or not map.character then return false end
+    local playerNum = map.character:getPlayerNum()
+    local context = ISContextMenu.get(playerNum, x + map:getAbsoluteX(), y + map:getAbsoluteY())
+    local personal = observation.personal == true
+    context:addOption(getText(personal and "IGUI_SM_VehicleClearPersonal"
+        or "IGUI_SM_VehicleMarkPersonal"), playerNum,
+        Runtime.setVehiclePersonal, observation.vehicleKey, not personal)
     return true
 end
 
@@ -220,6 +250,9 @@ local function drawVehicleTooltip(map, observation, x, y)
     local lines = {
         observation.displayName or getText("IGUI_SM_GenericVehicle"),
     }
+    if observation.personal then
+        table.insert(lines, getText("IGUI_SM_VehiclePersonal"))
+    end
     if observation.fuelState then
         table.insert(lines, getText("IGUI_SM_VehicleFuel_" .. observation.fuelState))
     end
@@ -345,9 +378,11 @@ if not Overlay.installed then
 
     local originalRightMouseUp = ISWorldMap.onRightMouseUp
     ISWorldMap.onRightMouseUp = function(self, x, y)
+        local vehicle = Overlay.vehicleAt(self, x, y)
         local memory = Overlay.memoryAt(self, x, y)
-        if memory and ModOptions.enabled("placeDesignations") then
+        if vehicle or (memory and ModOptions.enabled("placeDesignations")) then
             if self.symbolsUI:onRightMouseUpMap(x, y) then return true end
+            if vehicle then return Overlay.showVehicleContextMenu(self, vehicle, x, y) end
             return Overlay.showPlaceContextMenu(self, memory, x, y)
         end
         return originalRightMouseUp(self, x, y)

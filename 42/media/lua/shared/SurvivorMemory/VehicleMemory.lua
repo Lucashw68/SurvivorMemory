@@ -96,11 +96,22 @@ function VehicleMemory.sanitize(key, observation)
         observation.vehicleCondition)
     observation.vehicleConditionObservedAt = observation.vehicleCondition
         and tonumber(observation.vehicleConditionObservedAt) or nil
+    observation.personal = observation.personal == true
     -- These short-lived pre-release fields described only the engine. They must
     -- not survive as if they represented the vehicle's overall condition.
     observation.engineActivity, observation.engineActivityObservedAt = nil, nil
     observation.engineCondition, observation.engineConditionObservedAt = nil, nil
     return observation
+end
+
+function VehicleMemory.setPersonal(root, vehicleKey, personal)
+    if type(root) ~= "table" or type(root.vehicleMemories) ~= "table" then return false end
+    local observation = root.vehicleMemories[vehicleKey]
+    if not observation then return false end
+    personal = personal == true
+    if observation.personal == personal then return false end
+    observation.personal = personal
+    return true
 end
 
 local function sameMechanicalIdentity(observation, descriptor)

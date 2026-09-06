@@ -87,6 +87,7 @@ No, this is not an index of every hammer, nail, or suspiciously precious can of 
 [img]https://raw.githubusercontent.com/Lucashw68/SurvivorMemory/main/assets/workshop/description/vehicle.png[/img]
 Remember where your survivor last meaningfully encountered a vehicle: when entering it, inspecting its mechanics, or getting out.
 Legitimate dashboard and mechanics observations can also leave broad memories of fuel and overall condition, without storing suspiciously perfect percentages.
+Mark a remembered vehicle as personal from the vehicle itself or its map marker. It keeps the same icon; the tooltip remembers that it is yours.
 The marker is the vehicle's [i]last known position[/i]. There is no live GPS, no route tracking, and no magical update if somebody moves the car while you are gone.
 [i]Because "where did I leave the car?" is apparently still a problem after civilization ends.[/i]
 [i] [/i]

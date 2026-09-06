@@ -56,7 +56,7 @@ truthy(identity.key ~= BuildingIdentity.fromFields(nextHouse).key, "different bu
 equal(BuildingIdentity.fromFields(deepCopy(house)).key, identity.key, "building identity serialization")
 
 local rootData = MemoryStore.migrate(nil)
-equal(rootData.schemaVersion, 5, "new schema version")
+equal(rootData.schemaVersion, 6, "new schema version")
 local memory = MemoryStore.enterBuilding(rootData, identity, 24)
 equal(memory.firstVisited, 24, "first visit")
 equal(memory.lastVisited, 24, "first lastVisited")
@@ -118,7 +118,7 @@ equal(MemoryStore.stats(rootData, memory).containersInspected, 2, "source buildi
 local modData = {}
 local attached = MemoryStore.forModData(modData)
 truthy(attached == modData.SurvivorMemory, "player modData attachment")
-equal(attached.schemaVersion, 5, "player modData migration")
+equal(attached.schemaVersion, 6, "player modData migration")
 
 equal(TimeFormat.age(100, 99), "IGUI_SM_Today", "human time today")
 equal(TimeFormat.age(100, 75), "IGUI_SM_Yesterday", "human time yesterday")
@@ -131,7 +131,7 @@ equal(accepted, false, "unknown persistence version rejected")
 
 local recoveredModData = { SurvivorMemory = { schemaVersion = 999, buildings = {} } }
 local recovered = MemoryStore.forModData(recoveredModData)
-equal(recovered.schemaVersion, 5, "future schema degrades to fresh store")
+equal(recovered.schemaVersion, 6, "future schema degrades to fresh store")
 equal(recoveredModData.SurvivorMemoryRecovery.schemaVersion, 999, "future schema recovery marker")
 
 local partial = MemoryStore.migrate({
@@ -146,7 +146,7 @@ equal(partial.buildings.valid.firstVisited, 12, "partial first timestamp repaire
 equal(type(partial.buildings.valid.roomsKnown), "table", "partial room set repaired")
 equal(partial.buildings.invalid, nil, "unrecoverable building removed")
 equal(type(partial.debug), "table", "corrupted debug counters repaired")
-equal(partial.schemaVersion, 5, "v1 store migrates to current schema")
+equal(partial.schemaVersion, 6, "v1 store migrates to current schema")
 equal(partial.buildings.valid.placeDesignation, PlaceDesignation.NONE, "v1 building migrates to no designation")
 
 local corruptDesignation = MemoryStore.migrate({
@@ -200,7 +200,7 @@ local migratedEmotion = MemoryStore.migrate({
     buildings = { emotional = { firstVisited = 1, lastVisited = 2,
         emotionalMemory = { observedAt = 1, safeReturns = 1 } } },
 })
-equal(migratedEmotion.schemaVersion, 5, "v2 store migrates through to v5")
+equal(migratedEmotion.schemaVersion, 6, "v2 store migrates through to v6")
 equal(migratedEmotion.buildings.emotional.emotionalMemory.safeReturns, 1,
     "valid emotional memory survives migration")
 local corruptEmotion = MemoryStore.migrate({
@@ -242,7 +242,7 @@ local importantReload = MemoryStore.migrate(deepCopy(rootData))
 equal(#ImportantMemory.forBuilding(importantReload, identity.key), 1,
     "important memory survives serialization")
 local migratedImportant = MemoryStore.migrate({ schemaVersion = 3, buildings = {}, debug = {} })
-equal(migratedImportant.schemaVersion, 5, "v3 store migrates through to v5")
+equal(migratedImportant.schemaVersion, 6, "v3 store migrates through to v6")
 equal(type(migratedImportant.importantMemories), "table", "v4 migration creates important memory collection")
 local corruptImportant = MemoryStore.migrate({
     schemaVersion = 4, buildings = {}, debug = {},
@@ -370,6 +370,11 @@ equal(vehicleObservation.fuelState, VehicleMemory.FuelState.LOW,
     "vehicle stores broad observed fuel state")
 equal(vehicleObservation.vehicleCondition, VehicleMemory.VehicleCondition.POOR,
     "mechanics stores broad observed overall vehicle condition")
+truthy(VehicleMemory.setPersonal(rootData, mechanicalVehicle.key, true),
+    "remembered vehicle can be marked personal")
+equal(vehicleObservation.personal, true, "personal vehicle designation is stored")
+equal(VehicleMemory.setPersonal(rootData, mechanicalVehicle.key, true), false,
+    "duplicate personal vehicle designation is ignored")
 local vehicleRefreshed, movedVehicle = VehicleMemory.observe(rootData, {
     sqlId = -1, mechanicalId = 12004, scriptName = "Base.CarNormal",
     displayName = "Chevalier Dart", x = 350, y = 451, z = 0,
@@ -381,6 +386,7 @@ equal(movedVehicle.fuelState, VehicleMemory.FuelState.LOW,
     "less detailed revisit preserves last legitimate fuel memory")
 equal(movedVehicle.vehicleCondition, VehicleMemory.VehicleCondition.POOR,
     "less detailed revisit preserves last mechanics assessment")
+equal(movedVehicle.personal, true, "later observations preserve personal designation")
 equal(#VehicleMemory.all(rootData), 1, "vehicle memory has no route history")
 local promotedVehicle, promotedObservation, replacedKey = VehicleMemory.observe(rootData, {
     sqlId = 81, mechanicalId = 12004, scriptName = "Base.CarNormal",
@@ -391,24 +397,39 @@ equal(replacedKey, mechanicalVehicle.key, "fallback vehicle key is replaced afte
 equal(promotedObservation.vehicleKey, sqlVehicle.key, "promoted vehicle uses persistent SQL key")
 equal(promotedObservation.vehicleCondition, VehicleMemory.VehicleCondition.POOR,
     "identity promotion preserves overall-condition observations")
+equal(promotedObservation.personal, true,
+    "identity promotion preserves personal vehicle designation")
 equal(#VehicleMemory.all(rootData), 1, "identity promotion keeps one vehicle memory")
 local vehicleReload = MemoryStore.migrate(deepCopy(rootData))
 equal(vehicleReload.vehicleMemories[sqlVehicle.key].observedAt, 525,
     "vehicle memory survives serialization")
 equal(vehicleReload.vehicleMemories[sqlVehicle.key].fuelState, VehicleMemory.FuelState.LOW,
     "qualitative vehicle details survive serialization")
+equal(vehicleReload.vehicleMemories[sqlVehicle.key].personal, true,
+    "personal vehicle designation survives serialization")
+truthy(VehicleMemory.setPersonal(vehicleReload, sqlVehicle.key, false),
+    "personal vehicle designation can be removed")
+equal(vehicleReload.vehicleMemories[sqlVehicle.key].personal, false,
+    "removed personal vehicle designation is stored")
 local sanitizedVehicleDetail = VehicleMemory.sanitize("vehicle:sql:82", {
     sqlId = 82, scriptName = "Base.CarNormal", x = 1, y = 2, z = 0, observedAt = 3,
-    fuelState = "EXACT_PERCENTAGE", vehicleCondition = "EXACT_PERCENTAGE",
+    fuelState = "EXACT_PERCENTAGE", vehicleCondition = "EXACT_PERCENTAGE", personal = "true",
 })
 equal(sanitizedVehicleDetail.fuelState, nil, "unknown fuel state is discarded safely")
 equal(sanitizedVehicleDetail.vehicleCondition, nil,
     "unknown vehicle condition is discarded safely")
+equal(sanitizedVehicleDetail.personal, false,
+    "malformed personal vehicle designation degrades safely")
 local migratedVehicles = MemoryStore.migrate({ schemaVersion = 4, buildings = {}, debug = {} })
-equal(migratedVehicles.schemaVersion, 5, "v4 store migrates to v5")
-equal(type(migratedVehicles.vehicleMemories), "table", "v5 migration creates vehicle collection")
-local corruptVehicles = MemoryStore.migrate({
+equal(migratedVehicles.schemaVersion, 6, "v4 store migrates through to v6")
+equal(type(migratedVehicles.vehicleMemories), "table", "vehicle migration creates collection")
+local migratedPersonalVehicles = MemoryStore.migrate({
     schemaVersion = 5, buildings = {}, debug = {}, importantMemories = {},
+    vehicleMemories = {},
+})
+equal(migratedPersonalVehicles.schemaVersion, 6, "v5 store migrates to v6")
+local corruptVehicles = MemoryStore.migrate({
+    schemaVersion = 6, buildings = {}, debug = {}, importantMemories = {},
     vehicleMemories = { bad = { sqlId = "x", observedAt = 1, x = 1, y = 1, z = 0 } },
 })
 equal(corruptVehicles.vehicleMemories.bad, nil, "corrupt vehicle memory degrades safely")

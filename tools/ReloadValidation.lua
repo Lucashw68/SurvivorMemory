@@ -41,7 +41,7 @@ local function validateReload()
         if not condition then table.insert(failures, name) end
         log("CHECK " .. (condition and "PASS" or "FAIL") .. " name=" .. name)
     end
-    check(root and root.schemaVersion == 5, "schema_v5")
+    check(root and root.schemaVersion == 6, "schema_v6")
     check(buildingCount == 1, "one_building")
     check(memory and memory.visitCount == 2, "visit_count_preserved")
     check(memory and SurvivorMemory.MemoryStore.stats(nil, memory).roomsKnown == 2, "rooms_preserved")
@@ -71,6 +71,8 @@ local function validateReload()
         "vehicle_fuel_summary_preserved")
     check(#vehicles == 1 and vehicles[1].vehicleCondition == "POOR",
         "vehicle_overall_condition_preserved")
+    check(#vehicles == 1 and vehicles[1].personal == true,
+        "personal_vehicle_designation_preserved")
     log("RESULT status=" .. (#failures == 0 and "PASS" or "FAIL") .. " failures=" .. table.concat(failures, ","))
     getCore():quitToDesktop()
 end

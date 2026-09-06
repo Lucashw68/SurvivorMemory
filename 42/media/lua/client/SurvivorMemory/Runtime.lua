@@ -608,15 +608,59 @@ end
 
 function Runtime.installVehicleHooks()
     if Runtime.vehicleHooksInstalled then return end
-    require "Vehicles/ISUI/ISVehicleMenu"
-    if not ISVehicleMenu or not ISVehicleMenu.onMechanic then return end
-    local originalOnMechanic = ISVehicleMenu.onMechanic
-    ISVehicleMenu.onMechanic = function(player, vehicle)
-        Runtime.observeVehicle(player, vehicle, "mechanics")
-        return originalOnMechanic(player, vehicle)
+    require "Vehicles/TimedActions/ISOpenMechanicsUIAction"
+    if not ISOpenMechanicsUIAction or not ISOpenMechanicsUIAction.perform then return end
+    local originalPerform = ISOpenMechanicsUIAction.perform
+    ISOpenMechanicsUIAction.perform = function(self)
+        local result = originalPerform(self)
+        Runtime.observeVehicle(self.character, self.vehicle, "mechanics")
+        return result
     end
     Runtime.vehicleHooksInstalled = true
     print("[SurvivorMemory] B42 vehicle observation hooks installed")
+end
+
+function Runtime.vehicleMemoryFor(playerNum, vehicle)
+    local player = getSpecificPlayer(playerNum or 0)
+    if not player or not vehicle then return nil, nil end
+    local descriptor = Runtime.vehicleDescriptor(vehicle, "personal")
+    local identity = descriptor and VehicleMemory.identityFromFields(descriptor) or nil
+    local root = rootFor(player)
+    return identity and root.vehicleMemories[identity.key] or nil, identity
+end
+
+function Runtime.setVehiclePersonal(playerNum, vehicleKey, personal)
+    local player = getSpecificPlayer(playerNum or 0)
+    if not player or not ModOptions.enabled("vehicleMemory") then return false end
+    local root = rootFor(player)
+    if not VehicleMemory.setPersonal(root, vehicleKey, personal) then return false end
+    increment(root, "vehiclePersonalChanges")
+    syncPlayer(player, root)
+    notify("vehicle", player, nil)
+    return true
+end
+
+function Runtime.setVehiclePersonalFromVehicle(playerNum, vehicle, personal)
+    local player = getSpecificPlayer(playerNum or 0)
+    if not player or not player:isLocalPlayer() or not vehicle
+            or not ModOptions.enabled("vehicleMemory") then return false end
+    local root = rootFor(player)
+    local descriptor = Runtime.vehicleDescriptor(vehicle, "personal")
+    local identity = descriptor and VehicleMemory.identityFromFields(descriptor) or nil
+    if not identity then return false end
+    local observation = root.vehicleMemories[identity.key]
+    if not observation then
+        if personal ~= true then return false end
+        _, observation = VehicleMemory.observe(root, descriptor, TimeFormat.worldAgeHours())
+        if not observation then return false end
+        increment(root, "vehicleObservations")
+        increment(root, "vehicleObservations_personal")
+    end
+    if not VehicleMemory.setPersonal(root, observation.vehicleKey, personal) then return false end
+    increment(root, "vehiclePersonalChanges")
+    syncPlayer(player, root)
+    notify("vehicle", player, nil)
+    return true
 end
 
 function Runtime.currentMemory(playerNum)

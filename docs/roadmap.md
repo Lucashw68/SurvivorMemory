@@ -315,6 +315,9 @@ Map la dernière position où il se souvient du véhicule. Le tooltip affiche so
 nom et « Last seen X ago ». Le marqueur reste explicitement une observation
 possiblement obsolète. L'oubli après constat d'absence est différé jusqu'à
 disposer d'un test B42 local et visible sans faux positif.
+Le joueur peut marquer ou démarquer manuellement le véhicule comme personnel,
+depuis le véhicule visible ou son marqueur. Le tooltip le précise sans changer
+l'icône ni contourner le filtre Vehicle Memory.
 
 ### Rules
 
@@ -328,6 +331,7 @@ disposer d'un test B42 local et visible sans faux positif.
 - Pas de fuel, moteur, batterie, pneus, coffre ou télémétrie exacts en V1.
 - Le marqueur indique la dernière position connue, jamais la position distante
   actuelle.
+- La désignation `personal` est manuelle, propre au personnage et sans bonus.
 
 ### Constraints
 
@@ -347,8 +351,10 @@ mémoires personnelles.
 
 - Le SQL ID B42 est la clé principale; script + mechanical ID est un fallback
   promu sans doublon. Save/reload réel validé.
-- `OnEnterVehicle`, `OnExitVehicle` et `ISVehicleMenu.onMechanic` sont les
-  points d'observation retenus; le clic mécanique reste à valider manuellement.
+- `OnEnterVehicle`, `OnExitVehicle` et la fin effective de
+  `ISOpenMechanicsUIAction` sont les points d'observation retenus. Ce dernier
+  couvre le radial et le raccourci `E` devant le capot; validation manuelle à
+  finaliser.
 - Définir une constatation d'absence raisonnable sans scan de zone étendu.
 - Déterminer le comportement des véhicules remorqués, démontés ou remplacés.
 - Valider le rendu et la densité des marqueurs sur la World Map.
@@ -356,7 +362,8 @@ mémoires personnelles.
 ### Implementation phases
 
 1. **Livré :** audit B42 de l'identité et des événements véhicule.
-2. **Livré :** modèle personnel v5 et tests déterministes.
+2. **Livré :** modèle personnel v6, désignation manuelle d'un véhicule
+   personnel et tests déterministes.
 3. **Livré et validé en jeu :** observation entrée/sortie et save/reload.
 4. **Livré et validé en jeu :** marqueur de dernière position connue et tooltip.
 5. **À suivre prudemment :** oubli après absence localement constatée, cas

@@ -13,11 +13,11 @@ commande de partage. Un durcissement serveur (validation/rate limiting de
 commandes dédiées) pourra être ajouté si le mod devient compétitif, mais le MVP
 n'accorde aucun avantage à distance et n'envoie aucun contenu d'item.
 
-## Format v5
+## Format v6
 
 ```lua
 SurvivorMemory = {
-    schemaVersion = 5,
+    schemaVersion = 6,
     buildings = {
         [buildingKey] = {
             buildingKey = "b1:...",
@@ -59,6 +59,7 @@ SurvivorMemory = {
             displayName = "Chevalier Dart",
             x = 350, y = 451, z = 0,
             observedAt = 525.0,
+            personal = true,
         },
     },
     debug = {},
@@ -73,8 +74,10 @@ une entrée absente reste absente et une entrée corrompue est supprimée. La
 migration v3→v4 ajoute `importantMemories`; une observation invalide est
 supprimée sans affecter les bâtiments. La migration v4→v5 ajoute
 `vehicleMemories`; une entrée incomplète ou ambiguë est écartée. Une
+valeur v5 migre vers v6, qui ajoute la désignation personnelle optionnelle des
+véhicules; son absence équivaut à `false`. Une
 version inconnue est rejetée par `migrate`; `forModData` enregistre
-`SurvivorMemoryRecovery` puis repart sur un store v5
+`SurvivorMemoryRecovery` puis repart sur un store v6
 vide afin de ne pas bloquer le chargement du personnage.
 
 `placeDesignation` est manuel, personnel au personnage et limité à `NONE`,
@@ -90,6 +93,8 @@ représentatives et date in-game de dernière observation. Il ne contient aucun
 position courante distante. Le SQL ID B42 est préféré; le couple script +
 mechanical ID sert uniquement de fallback et est promu sans doublon lorsqu'un
 SQL ID devient disponible.
+Le booléen `personal` est une désignation manuelle propre au personnage. Il ne
+change ni l'icône, ni les règles d'observation, ni la position mémorisée.
 
 ## Extensions futures
 
