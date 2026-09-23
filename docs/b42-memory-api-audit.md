@@ -8,6 +8,14 @@ portent sur cette build, pas sur B41.
 Les traductions du MVP utilisent également le format B42 JSON natif
 `Translate/<langue>/IG_UI.json`, et non les tables `*_EN.txt` historiques.
 
+### Lua/Kahlua — présence d'entrées
+
+Le smoke B42 du 23 septembre 2026 a montré que le global Lua standard `next`
+n'est pas disponible (`Object tried to call nil` dans le test de présence du
+badge carte). Utiliser `pairs` avec retour dès la première entrée pour tester
+une table non vide. Le test simulé du badge désactive explicitement `next`
+pour ne pas masquer cette différence avec l'interpréteur Lua des tests locaux.
+
 ## Buildings et rooms
 
 `IsoGridSquare` expose `getBuilding()`, `getBuildingDef()`, `getRoom()` et
@@ -83,6 +91,25 @@ un nouvel objet peut rétrograder la complétion. L'ordre des objets d'une case
 est sauvegardé en pratique mais n'est pas contractuellement stable: c'est le
 principal risque d'identité container MVP.
 
+### Respawn du loot (B42.20.4)
+
+L'inspection bytecode de `zombie.LootRespawn` confirme que le traitement ne
+s'exécute pas sur un client MP. Il vérifie périodiquement les chunks chargés et
+ne traite que `TownZone`, `TownZones` et `TrailerPark`, selon
+`HoursForLootRespawn`, `SeenHoursPreventLootRespawn`, le seuil maximal d'items,
+les constructions et, côté serveur, les safehouses.
+
+Un contenant doit être `explored` et `hasBeenLooted`. Lorsque
+`ItemPickerJava.fillContainer` ajoute effectivement au moins un objet,
+`LootRespawn` appelle `setHasBeenLooted(false)`. Le paquet MP
+`AddInventoryItemToContainer` transmet les nouveaux objets mais pas ce booléen.
+La confirmation de Survivor Memory est donc locale en solo et prend la forme
+d'une requête serveur ciblée en MP, uniquement lors de la sélection dans le
+loot UI d'un contenant connu et précédemment pillé. Le serveur valide les
+coordonnées, l'identité, le bâtiment et la proximité avant de lire le drapeau.
+Aucun événement Lua public dédié au respawn et aucun scan de bâtiment ne sont
+utilisés.
+
 ## Temps et persistence
 
 `GameTime:getWorldAgeHours()` fournit un double in-game déterministe. Les valeurs
@@ -96,7 +123,7 @@ fichier personnage en solo et reste propre au personnage. En client MP,
 implicitement les souvenirs.
 
 Les tables Lua sérialisables sont supportées; références Java, fonctions et
-metatables ne sont jamais persistées. Le format courant a `schemaVersion = 6`
+metatables ne sont jamais persistées. Le format courant a `schemaVersion = 10`
 et une fonction de migration centrale. La v2 ajoute la désignation personnelle;
 la v3 ajoute le souvenir émotionnel optionnel.
 
@@ -127,8 +154,13 @@ référence se trouve dans
 
 ## Performance et instrumentation
 
+L'audit complémentaire des couches de rendu B42 et des liaisons de sous-sols
+est détaillé dans [map-and-basement-memory.md](map-and-basement-memory.md).
+
 Il n'existe aucun scan mondial, scan de bâtiment complet ou scan périodique de
-containers. Les compteurs persistés sous `debug` sont `buildingEntries`,
+containers. Le suivi du respawn ajoute une écriture unique lorsqu'un contenant
+éligible devient armé et, en MP, une requête ciblée lorsqu'il est réinspecté.
+Les compteurs persistés sous `debug` sont `buildingEntries`,
 `buildingExits`, `roomsDiscovered`, `containersObserved` et
 `containersInspected` et `modDataWrites`. Le panneau debug montre aussi la
 session, les clés observées, les timestamps bruts, la version et la taille

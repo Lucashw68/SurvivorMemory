@@ -6,6 +6,7 @@ require "SurvivorMemory/LocationName"
 require "SurvivorMemory/PlaceDesignation"
 require "SurvivorMemory/ImportantMemory"
 require "SurvivorMemory/ModOptions"
+require "SurvivorMemory/MapTooltip"
 
 SurvivorMemory = SurvivorMemory or {}
 SurvivorMemory.MemoryPanel = SurvivorMemory.UICompat.WindowBase:derive("SurvivorMemoryPanel")
@@ -109,7 +110,10 @@ function MemoryPanel:render()
     local now = TimeFormat.worldAgeHours()
 
     y = self:drawSection(getText("IGUI_SM_SectionLocation"), y)
-    y = self:drawLine(LocationName.text(memory), y)
+    for _, line in ipairs(SurvivorMemory.MapTooltip.wrap(LocationName.text(memory),
+            UIFont.Small, self.width - self.padding * 4)) do
+        y = self:drawLine(line, y)
+    end
     if ModOptions.enabled("places") then
         y = self:drawLine(getText("IGUI_SM_PlaceDesignation",
             getText("IGUI_SM_Place_" .. PlaceDesignation.normalize(memory.placeDesignation))), y)
@@ -146,7 +150,16 @@ function MemoryPanel:render()
 
     y = self:drawSection(getText("IGUI_SM_SectionStatus"), y)
     local statusText = getText("IGUI_SM_Status_" .. memory.status)
-    self:drawLine(statusText, y, 0.72, 0.88, 0.62)
+    y = self:drawLine(statusText, y, 0.72, 0.88, 0.62)
+    local lootNotice = SurvivorMemory.Runtime.lootRespawnNotice(self.playerNum, memory)
+    if lootNotice == "CONFIRMED" then
+        y = self:drawLine(getText("IGUI_SM_LootRespawnConfirmed"), y, 0.92, 0.70, 0.34)
+    elseif lootNotice == "POSSIBLE" then
+        y = self:drawLine(getText("IGUI_SM_LootRespawnPossible"), y, 0.86, 0.76, 0.50)
+    end
+    local height = math.min(math.max(self.baseHeight, y + self.padding * 2),
+        math.floor(getPlayerScreenHeight(self.playerNum) * 0.90))
+    if self.height ~= height then self:setHeight(height) end
 end
 
 function MemoryPanel:new(playerNum)
@@ -161,6 +174,7 @@ function MemoryPanel:new(playerNum)
     local y = getPlayerScreenTop(playerNum) + math.floor((getPlayerScreenHeight(playerNum) - height) / 2)
     local panel = UICompat.newWindow(self, x, y, width, height)
     panel.playerNum = playerNum
+    panel.baseHeight = height
     panel.background = not UICompat.neatAvailable
     panel.moveWithMouse = UICompat.neatAvailable
     panel.padding = math.max(6, math.floor(small * 0.55))

@@ -10,6 +10,7 @@ require "SurvivorMemory/ImportantMemory"
 require "SurvivorMemory/VehicleMemory"
 require "SurvivorMemory/VisibleObservation"
 require "SurvivorMemory/ModOptions"
+require "SurvivorMemory/LootRespawnMemory"
 
 SurvivorMemory = SurvivorMemory or {}
 SurvivorMemory.Runtime = SurvivorMemory.Runtime or {}
@@ -27,6 +28,9 @@ local ImportantMemory = SurvivorMemory.ImportantMemory
 local VehicleMemory = SurvivorMemory.VehicleMemory
 local VisibleObservation = SurvivorMemory.VisibleObservation
 local ModOptions = SurvivorMemory.ModOptions
+local LootRespawnMemory = SurvivorMemory.LootRespawnMemory
+local ItemMemory = SurvivorMemory.ItemMemory
+local BuildingLinks = SurvivorMemory.BuildingLinks
 local rootFor, increment, syncPlayer
 local IMPORTANT_FEATURE_FOR_KIND = {
     [ImportantMemory.Kind.GENERATOR] = "generatorMemory",
@@ -37,6 +41,7 @@ local IMPORTANT_FEATURE_FOR_KIND = {
 Runtime.players = Runtime.players or {}
 Runtime.hooksInstalled = Runtime.hooksInstalled or false
 Runtime.vehicleHooksInstalled = Runtime.vehicleHooksInstalled or false
+Runtime.transferHooksInstalled = Runtime.transferHooksInstalled or false
 Runtime.counters = Runtime.counters or { playerUpdates = 0, squareTransitions = 0 }
 Runtime.listeners = Runtime.listeners or {}
 Runtime.importantCandidates = Runtime.importantCandidates or {}
@@ -77,6 +82,9 @@ local function stateFor(player)
         state.importantObservationPending = false
         state.importantObservationAtMs = nil
         state.viewDirection = nil
+        state.pendingLootRespawnChecks = {}
+        state.lootRespawnConfirmed = false
+        state.lootRespawnPossible = false
         Runtime.players[playerNum] = state
     end
     return state
@@ -177,6 +185,46 @@ rootFor = function(player)
     return MemoryStore.forModData(player:getModData())
 end
 
+function Runtime.buildingIdentity(root, building)
+    local identity = BuildingIdentity.fromBuilding(building)
+    if not identity then return nil end
+    identity.key = BuildingLinks.resolve(root, identity.key)
+    local memory = root.buildings[identity.key]
+    if memory then identity.centerX, identity.centerY = memory.centerX, memory.centerY end
+    return identity
+end
+
+function Runtime.observeBuildingPassage(player, square, state, root)
+    local raw = BuildingIdentity.fromBuilding(square:getBuilding())
+    local current = {
+        key = raw and raw.key, identity = raw,
+        x = square:getX(), y = square:getY(), z = square:getZ(),
+        stairs = square:HasStairs() or square:HasStairsBelow(),
+        vehicle = player:getVehicle() ~= nil,
+    }
+    local previous = state.observedBuildingSquare
+    state.observedBuildingSquare = current
+    if not BuildingLinks.isBasementPassage(previous, current) then return false end
+    local upper = previous.z > current.z and previous or current
+    local lower = previous.z < current.z and previous or current
+    local parentKey = BuildingLinks.resolve(root, upper.key)
+    local childKey = BuildingLinks.resolve(root, lower.key)
+    if parentKey == childKey then return false end
+    local now = TimeFormat.worldAgeHours()
+    -- Both volumes have now actually been entered; creating the newly visited
+    -- component here avoids counting the staircase as another visit.
+    if not root.buildings[parentKey] then root.buildings[parentKey] = MemoryStore.newBuilding(upper.identity, now) end
+    if not root.buildings[childKey] then root.buildings[childKey] = MemoryStore.newBuilding(lower.identity, now) end
+    if not BuildingLinks.merge(root, childKey, parentKey) then return false end
+    state.buildingKey = BuildingLinks.resolve(root, state.buildingKey)
+    state.roomKey = nil
+    state.pendingLootRespawnChecks = {}
+    increment(root, "basementLinksObserved")
+    syncPlayer(player, root)
+    notify("linked", player, root.buildings[parentKey])
+    return true
+end
+
 increment = function(root, name)
     root.debug[name] = (tonumber(root.debug[name]) or 0) + 1
 end
@@ -211,8 +259,8 @@ function Runtime.observeImportantObject(playerNum, object)
     local square = object and object:getSquare() or nil
     if not player or not kind or not ModOptions.enabled(IMPORTANT_FEATURE_FOR_KIND[kind])
             or not square or not square:isCouldSee(player:getPlayerNum()) then return false end
-    local buildingIdentity = BuildingIdentity.fromBuilding(square:getBuilding())
     local root = rootFor(player)
+    local buildingIdentity = Runtime.buildingIdentity(root, square:getBuilding())
     local _, observation = ImportantMemory.observe(root, kind, {
         x = square:getX(), y = square:getY(), z = square:getZ(),
         buildingKey = buildingIdentity and buildingIdentity.key or nil,
@@ -336,11 +384,11 @@ function Runtime.observeVisibleImportantObjects(player)
 end
 
 local function enterBuilding(player, state, building, now)
-    local identity = BuildingIdentity.fromBuilding(building)
-    if not identity then return nil end
     local root = rootFor(player)
+    local identity = Runtime.buildingIdentity(root, building)
+    if not identity then return nil end
     local memory = MemoryStore.enterBuilding(root, identity, now)
-    LocationName.observe(memory, building, player:getCurrentSquare() and player:getCurrentSquare():getRoom())
+    LocationName.observe(memory, player:getCurrentSquare() and player:getCurrentSquare():getRoom())
     state.buildingKey = identity.key
     state.emotionalTracker = nil
     state.emotionalTriggeredThisVisit = false
@@ -477,20 +525,28 @@ function Runtime.onPlayerUpdate(player)
     if not ModOptions.enabled("buildingMemory") then return end
 
     local building = square:getBuilding()
-    local identity = BuildingIdentity.fromBuilding(building)
+    local currentRoot = rootFor(player)
+    Runtime.observeBuildingPassage(player, square, state, currentRoot)
+    local identity = Runtime.buildingIdentity(currentRoot, building)
     local nextKey = identity and identity.key or nil
     local now = TimeFormat.worldAgeHours()
 
-    local currentRoot = rootFor(player)
     local transition = VisitSession.update(state, nextKey,
         nextKey ~= nil and currentRoot.buildings[nextKey] ~= nil)
     if transition.exited then
+        state.lootRespawnConfirmed = false
+        state.lootRespawnPossible = false
+        state.pendingLootRespawnChecks = {}
         finishEmotionalVisit(state, currentRoot, transition.exited, now)
         increment(currentRoot, "buildingExits")
         syncPlayer(player, currentRoot)
         notify("exited", player, nil)
     end
     if transition.entered then
+        state.lootRespawnConfirmed = false
+        state.lootRespawnPossible = Runtime.mayHaveLootRespawned(
+            currentRoot.buildings[transition.entered])
+        state.pendingLootRespawnChecks = {}
         enterBuilding(player, state, building, now)
     elseif transition.resumed then
         local resumedMemory = currentRoot.buildings[nextKey]
@@ -501,7 +557,9 @@ function Runtime.onPlayerUpdate(player)
             state.emotionalEnteredAt = now
             state.lastEmotionalSampleMs = nil
             state.nextEmotionalSampleMs = nil
-            LocationName.observe(resumedMemory, building, square:getRoom())
+            if LocationName.observe(resumedMemory, square:getRoom()) then
+                syncPlayer(player, currentRoot)
+            end
             notify("entered", player, resumedMemory)
         end
     end
@@ -513,13 +571,16 @@ function Runtime.onPlayerUpdate(player)
     local nextRoomKey = BuildingIdentity.roomKey(state.buildingKey, room)
     if nextRoomKey ~= state.roomKey then
         state.roomKey = nil
-        if room and ModOptions.enabled("rooms") then
-            local oldKind = memory.locationKind
-            discoverCurrentRoom(player, state, room, memory, now)
-            if LocationName.observe(memory, building, room) and memory.locationKind ~= oldKind then
-                syncPlayer(player, root)
+        if room and ModOptions.enabled("rooms") then discoverCurrentRoom(player, state, room, memory, now) end
+    end
+    if nextRoomKey ~= state.locationRoomKey then
+        state.locationRoomKey = nextRoomKey
+        if room then
+            local labelChanged = LocationName.observe(memory, room)
+            if labelChanged then syncPlayer(player, root) end
+            if labelChanged or (nextRoomKey == state.roomKey and ModOptions.enabled("rooms")) then
+                notify("updated", player, memory)
             end
-            notify("updated", player, memory)
         end
     end
 end
@@ -533,11 +594,79 @@ local function memoryForContainer(page, container)
     if not ContainerIdentity.isNaturalBuildingContainer(container, building) then
         return nil, nil, nil
     end
-    local identity = BuildingIdentity.fromBuilding(building)
     local root = rootFor(player)
+    local identity = Runtime.buildingIdentity(root, building)
     local memory = identity and root.buildings[identity.key] or nil
     if not memory then return nil, nil, nil end
     return player, root, memory
+end
+
+local function memoryForPlayerContainer(player, container)
+    if not player or not container then return nil, nil end
+    local square = container:getSourceGrid()
+    local building = square and square:getBuilding() or nil
+    if not ContainerIdentity.isNaturalBuildingContainer(container, building) then return nil, nil end
+    local root = rootFor(player)
+    local identity = Runtime.buildingIdentity(root, building)
+    return root, identity and root.buildings[identity.key] or nil
+end
+
+local function eligibleRespawnZone(container)
+    local square = container and container:getSourceGrid() or nil
+    if not square then return false end
+    local parent = container:getParent()
+    if not parent or instanceof(parent, "IsoThumpable")
+            or instanceof(parent, "IsoCompost")
+            or instanceof(parent, "IsoDeadBody") then return false end
+    local zoneSquare = getCell():getGridSquare(square:getX(), square:getY(), 0) or square
+    local zone = zoneSquare and zoneSquare:getZone() or nil
+    return LootRespawnMemory.isEligibleZoneType(zone and zone:getType() or nil)
+end
+
+local function confirmLootRespawn(player, memory, containerKey)
+    local now = TimeFormat.worldAgeHours()
+    if not MemoryStore.confirmLootRespawn(memory, containerKey, now) then return false end
+    local root = rootFor(player)
+    local state = stateFor(player)
+    state.pendingLootRespawnChecks[containerKey] = nil
+    if state.buildingKey == memory.buildingKey then
+        state.lootRespawnConfirmed = true
+        state.lootRespawnPossible = false
+    end
+    increment(root, "lootRespawnsConfirmed")
+    syncPlayer(player, root)
+    notify("lootRespawn", player, memory)
+    return true
+end
+
+local function checkLootRespawn(player, memory, container, containerKey)
+    if not ModOptions.enabled("lootRespawnAwareness")
+            or not LootRespawnMemory.isArmed(memory, containerKey) then return end
+    local state = stateFor(player)
+    if state.pendingLootRespawnChecks[containerKey] then return end
+    if not isClient() then
+        if not container:isHasBeenLooted() then
+            confirmLootRespawn(player, memory, containerKey)
+        end
+        return
+    end
+    local square = container:getSourceGrid()
+    local parent = container:getParent()
+    if not square or not parent then return end
+    local containerIndex = 0
+    for index = 0, parent:getContainerCount() - 1 do
+        if parent:getContainerByIndex(index) == container then
+            containerIndex = index
+            break
+        end
+    end
+    state.pendingLootRespawnChecks[containerKey] = true
+    sendClientCommand(player, "SurvivorMemory", "checkLootRespawn", {
+        playerNum = player:getPlayerNum(),
+        x = square:getX(), y = square:getY(), z = square:getZ(),
+        objectIndex = parent:getObjectIndex(), containerIndex = containerIndex,
+        buildingKey = memory.buildingKey, containerKey = containerKey,
+    })
 end
 
 function Runtime.observeContainer(page, container)
@@ -559,12 +688,80 @@ function Runtime.observeContainer(page, container)
     end
 end
 
+function Runtime.markContainerLooted(player, container)
+    if not ModOptions.enabled("lootRespawnAwareness")
+            or not player or not player:isLocalPlayer() then return false end
+    local root, memory = memoryForPlayerContainer(player, container)
+    if not memory then return false end
+    local key = ContainerIdentity.fromContainer(container)
+    if not key or not MemoryStore.markContainerLooted(memory, key,
+            TimeFormat.worldAgeHours(), eligibleRespawnZone(container)) then return false end
+    increment(root, "lootRespawnContainersArmed")
+    syncPlayer(player, root)
+    notify("updated", player, memory)
+    return true
+end
+
+function Runtime.installTransferHooks()
+    if Runtime.transferHooksInstalled then return end
+    require "TimedActions/ISInventoryTransferAction"
+    if not ISInventoryTransferAction or not ISInventoryTransferAction.perform then return end
+    local originalPerform = ISInventoryTransferAction.perform
+    ISInventoryTransferAction.perform = function(self)
+        local source = self.srcContainer
+        local character = self.character
+        local result = originalPerform(self)
+        if source and character then Runtime.markContainerLooted(character, source) end
+        return result
+    end
+    Runtime.transferHooksInstalled = true
+    print("[SurvivorMemory] B42 loot-respawn transfer hook installed")
+end
+
+function Runtime.mayHaveLootRespawned(memory)
+    if not ModOptions.enabled("lootRespawnAwareness") then return false end
+    local respawnHours = SandboxVars and tonumber(SandboxVars.HoursForLootRespawn) or 0
+    local unseenHours = SandboxVars and tonumber(SandboxVars.SeenHoursPreventLootRespawn) or 0
+    return LootRespawnMemory.mayHaveReappeared(memory, TimeFormat.worldAgeHours(),
+        respawnHours, unseenHours)
+end
+
+function Runtime.lootRespawnNotice(playerNum, memory)
+    if not memory or not ModOptions.enabled("lootRespawnAwareness") then return nil end
+    local player = getSpecificPlayer(playerNum or 0)
+    local state = player and stateFor(player) or nil
+    if state and state.buildingKey == memory.buildingKey and state.lootRespawnConfirmed then
+        return "CONFIRMED"
+    end
+    if state and state.buildingKey == memory.buildingKey and state.lootRespawnPossible then
+        return "POSSIBLE"
+    end
+    return Runtime.mayHaveLootRespawned(memory) and "POSSIBLE" or nil
+end
+
+function Runtime.onServerCommand(module, command, args)
+    if module ~= "SurvivorMemory" or command ~= "lootRespawnCheck" or type(args) ~= "table" then
+        return
+    end
+    local player = getSpecificPlayer(tonumber(args.playerNum) or 0)
+    if not player then return end
+    local state = stateFor(player)
+    local containerKey = type(args.containerKey) == "string" and args.containerKey or nil
+    if containerKey then state.pendingLootRespawnChecks[containerKey] = nil end
+    if args.respawned == true and containerKey and type(args.buildingKey) == "string" then
+        local root = rootFor(player)
+        local memory = root.buildings[BuildingLinks.resolve(root, args.buildingKey)]
+        if memory then confirmLootRespawn(player, memory, containerKey) end
+    end
+end
+
 function Runtime.inspectContainer(page, container)
     if not ModOptions.enabled("containers") then return end
     local player, root, memory = memoryForContainer(page, container)
     if not memory then return end
     local key = ContainerIdentity.fromContainer(container)
     if not key then return end
+    checkLootRespawn(player, memory, container, key)
     local now = TimeFormat.worldAgeHours()
     local oldStatus = memory.status
     local firstInspection = memory.containersInspected[key] == nil
@@ -574,6 +771,74 @@ function Runtime.inspectContainer(page, container)
     end
     syncPlayer(player, root)
     notify(oldStatus ~= memory.status and "status" or "updated", player, memory)
+end
+
+-- Validate again when the menu action executes: the item may have moved since
+-- the menu opened. Only the currently displayed, nearby loot container counts.
+function Runtime.itemMemoryContext(playerNum, item)
+    local player = getSpecificPlayer(playerNum)
+    local loot = getPlayerLoot(playerNum)
+    if not ModOptions.enabled("itemMemory") or not player or not player:isLocalPlayer()
+            or not item or not instanceof(item, "InventoryItem")
+            or not loot or not loot:isReallyVisible() or loot.isCollapsed
+            or not loot.inventoryPane then return nil end
+    local container = item:getContainer()
+    if not container or loot.inventoryPane.inventory ~= container then return nil end
+    local square = container:getSourceGrid()
+    local playerSquare = player:getCurrentSquare()
+    if not square or not playerSquare or square:getZ() ~= playerSquare:getZ()
+            or math.abs(square:getX() - playerSquare:getX()) > 2
+            or math.abs(square:getY() - playerSquare:getY()) > 2 then return nil end
+    local root, memory = memoryForPlayerContainer(player, container)
+    local parent = container:getParent()
+    if not memory or not parent or parent:getObjectIndex() < 0 then return nil end
+    local key = ContainerIdentity.fromContainer(container)
+    if not key then return nil end
+    return player, root, memory, key
+end
+
+function Runtime.rememberItems(playerNum, items)
+    local grouped, player, root, memory = {}
+    for _, item in ipairs(items or {}) do
+        local owner, store, building, containerKey = Runtime.itemMemoryContext(playerNum, item)
+        if owner then
+            local itemType = item:getFullType()
+            local key = ItemMemory.key(containerKey, itemType)
+            if not grouped[key] then
+                local texture = item:getTex()
+                grouped[key] = {
+                    itemType = itemType, containerKey = containerKey,
+                    displayName = item:getName(), quantityObserved = 0,
+                    observedAt = TimeFormat.worldAgeHours(),
+                    textureName = texture and texture:getName() or nil,
+                }
+            end
+            grouped[key].quantityObserved = grouped[key].quantityObserved + math.max(1, item:getCount())
+            player, root, memory = owner, store, building
+        end
+    end
+    if not memory then return false end
+    local changed = false
+    for _, observation in pairs(grouped) do
+        if ItemMemory.remember(memory, observation) then changed = true end
+    end
+    if changed then
+        increment(root, "itemMemorySelections")
+        syncPlayer(player, root)
+        notify("items", player, memory)
+    end
+    return changed
+end
+
+function Runtime.forgetItem(playerNum, buildingKey, itemKey)
+    local player = getSpecificPlayer(playerNum)
+    if not player or not player:isLocalPlayer() or not ModOptions.enabled("itemMemory") then return false end
+    local root = rootFor(player)
+    local memory = root.buildings[BuildingLinks.resolve(root, buildingKey)]
+    if not ItemMemory.forget(memory, itemKey) then return false end
+    syncPlayer(player, root)
+    notify("items", player, memory)
+    return true
 end
 
 function Runtime.installInventoryHooks()
@@ -679,7 +944,7 @@ function Runtime.setPlaceDesignation(playerNum, buildingKey, designation)
     local player = getSpecificPlayer(playerNum)
     if not player then return false end
     local root = rootFor(player)
-    local memory = root.buildings[buildingKey]
+    local memory = root.buildings[BuildingLinks.resolve(root, buildingKey)]
     if not memory or not MemoryStore.setPlaceDesignation(memory, designation) then return false end
     increment(root, "placeDesignationChanges")
     syncPlayer(player, root)
@@ -727,6 +992,7 @@ ModOptions.addListener(applyOptions)
 Events.OnPlayerUpdate.Add(Runtime.onPlayerUpdate)
 Events.OnGameStart.Add(Runtime.installInventoryHooks)
 Events.OnGameStart.Add(Runtime.installVehicleHooks)
+Events.OnGameStart.Add(Runtime.installTransferHooks)
 Events.OnEnterVehicle.Add(Runtime.onEnterVehicle)
 Events.OnExitVehicle.Add(Runtime.onExitVehicle)
 Events.OnCreatePlayer.Add(function(playerNum) Runtime.resetPlayer(playerNum) end)
@@ -734,5 +1000,6 @@ Events.LoadGridsquare.Add(Runtime.onLoadGridSquare)
 Events.OnObjectAdded.Add(Runtime.onObjectAdded)
 Events.OnObjectAboutToBeRemoved.Add(Runtime.onObjectAboutToBeRemoved)
 Events.OnSeeNewRoom.Add(Runtime.onSeeNewRoom)
+Events.OnServerCommand.Add(Runtime.onServerCommand)
 
 return Runtime

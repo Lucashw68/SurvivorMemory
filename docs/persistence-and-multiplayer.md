@@ -11,13 +11,16 @@ En MP, le client local observe et met à jour sa mémoire, puis transmet le
 `modData` du personnage. Il n'existe ni table globale de connaissances, ni
 commande de partage. Un durcissement serveur (validation/rate limiting de
 commandes dédiées) pourra être ajouté si le mod devient compétitif, mais le MVP
-n'accorde aucun avantage à distance et n'envoie aucun contenu d'item.
+n'accorde aucun avantage à distance. Seuls les souvenirs d'objets explicitement
+sélectionnés sont transmis avec le ModData de leur propriétaire.
 
-## Format v6
+## Format v10
 
 ```lua
 SurvivorMemory = {
-    schemaVersion = 6,
+    schemaVersion = 10,
+    buildingAliases = { [observedBasementKey] = observedSurfaceKey },
+    linkedBuildingHistory = { [originalKey] = originalBuildingSnapshot },
     buildings = {
         [buildingKey] = {
             buildingKey = "b1:...",
@@ -25,8 +28,18 @@ SurvivorMemory = {
             lastVisited = 99.5,
             visitCount = 2,
             roomsKnown = { [roomKey] = observedWorldAgeHours },
+            locationKinds = { MEDICAL = true, WAREHOUSE = true },
             containersKnown = { [containerKey] = observedWorldAgeHours },
             containersInspected = { [containerKey] = lastInspectedWorldAgeHours },
+            itemMemories = {
+                [itemMemoryKey] = {
+                    itemType = "Base.NailsBox", displayName = "Box of Nails",
+                    containerKey = "c1:...", quantityObserved = 1,
+                    textureName = "Item_NailsBox", observedAt = 99.5,
+                },
+            },
+            lootRespawnArmed = { [containerKey] = lastLootedWorldAgeHours },
+            searchCompletedAt = 99.5,
             status = "PARTIALLY_SEARCHED",
             centerX = 105,
             centerY = 206,
@@ -75,10 +88,33 @@ migration v3→v4 ajoute `importantMemories`; une observation invalide est
 supprimée sans affecter les bâtiments. La migration v4→v5 ajoute
 `vehicleMemories`; une entrée incomplète ou ambiguë est écartée. Une
 valeur v5 migre vers v6, qui ajoute la désignation personnelle optionnelle des
-véhicules; son absence équivaut à `false`. Une
-version inconnue est rejetée par `migrate`; `forModData` enregistre
-`SurvivorMemoryRecovery` puis repart sur un store v6
+véhicules; son absence équivaut à `false`. Une valeur v6 migre vers v7, qui
+ajoute le suivi minimal du respawn vanilla. Les
+anciens bâtiments `SEARCHED` récupèrent un `searchCompletedAt` déterministe à
+partir de leur inspection la plus récente, mais aucun conteneur n'est supposé
+avoir été pillé rétroactivement. La migration v7→v8 ajoute `itemMemories` vide
+aux bâtiments existants, sans inventer d'observations ni modifier les visites.
+La migration v8→v9 initialise `buildingAliases` et `linkedBuildingHistory` sans
+lier de bâtiments arbitrairement. Une liaison est créée uniquement après une
+traversée locale admissible. Voir [regroupement des sous-sols](map-and-basement-memory.md).
+La migration v9→v10 reconstruit `locationKinds` à partir des noms encodés dans
+les clés `r1` de `roomsKnown`, sans charger ni rechercher de pièces dans le monde.
+L'ancien `locationKind` est conservé comme donnée historique, mais n'est plus
+utilisé pour l'affichage : il pouvait être déduit de pièces non explorées.
+Sans preuve reconnue, le titre devient « Building ». Les visites, observations,
+désignations et identités ne changent pas. Une table v10 manquante est réparée
+depuis ces mêmes pièces mémorisées ; une table valide reste l'ensemble des
+types découverts. Les alias de sous-sol fusionnent aussi cet ensemble.
+Voir [classification des lieux](location-naming-semantics.md).
+Une version inconnue est rejetée par `migrate`;
+`forModData` enregistre `SurvivorMemoryRecovery` puis repart sur un store v10
 vide afin de ne pas bloquer le chargement du personnage.
+
+`lootRespawnArmed` ne stocke ni contenu ni quantité. Il indique seulement qu'un
+conteneur naturel connu, situé dans une zone vanilla éligible, a réellement été
+pillé par ce personnage. En MP, la confirmation `hasBeenLooted: true → false`
+est demandée au serveur uniquement lorsque ce même conteneur apparaît à nouveau
+dans l'interface de loot et que le personnage se trouve à proximité.
 
 `placeDesignation` est manuel, personnel au personnage et limité à `NONE`,
 `HOME` ou `OUTPOST`. Une valeur absente ou corrompue est ramenée à `NONE`.

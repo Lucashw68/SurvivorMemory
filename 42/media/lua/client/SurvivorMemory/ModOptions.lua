@@ -94,9 +94,11 @@ local function refreshDependencies()
 
     setEnabled("preferNeatUI", master)
     setEnabled("buildingMemoryEnabled", master)
-    for _, id in ipairs({ "rememberRooms", "rememberContainers", "showStatusIndicator" }) do
+    for _, id in ipairs({ "rememberRooms", "rememberContainers", "showStatusIndicator", "itemMemoryEnabled" }) do
         setEnabled(id, building)
     end
+    setEnabled("lootRespawnAwareness",
+        building and selected("rememberContainers", "containers"))
     setEnabled("placesEnabled", building)
     for _, id in ipairs({ "allowPlaceDesignations", "hideIndicatorInSearchedPlaces" }) do
         setEnabled(id, places)
@@ -114,12 +116,13 @@ local function refreshDependencies()
     setEnabled("worldMapOverlayEnabled", master)
     for _, id in ipairs({ "overlayVisibleByDefault", "showBuildingMarkers",
             "showPersonalPlaceMarkers", "showImportantMemoryMarkers",
-            "showVehicleMarkers", "markerSizePercent" }) do
+            "showVehicleMarkers", "markerSizePercent", "fadeDistantMarkers" }) do
         setEnabled(id, map)
     end
     setEnabled("showPersonalPlaceMarkers", map and places)
     setEnabled("showImportantMemoryMarkers", map and important)
     setEnabled("showVehicleMarkers", map and vehicle)
+    setEnabled("markerFocusRadius", map and selected("fadeDistantMarkers", "fadeDistantMarkers"))
 end
 
 local function liveApply(option, field)
@@ -187,6 +190,10 @@ function ModOptions.register()
         "IGUI_SM_OptionRememberRoomsTooltip")
     addTick(options, "rememberContainers", "IGUI_SM_OptionRememberContainers",
         "IGUI_SM_OptionRememberContainersTooltip")
+    addTick(options, "itemMemoryEnabled", "IGUI_SM_OptionItemMemory",
+        "IGUI_SM_OptionItemMemoryTooltip")
+    addTick(options, "lootRespawnAwareness", "IGUI_SM_OptionLootRespawnAwareness",
+        "IGUI_SM_OptionLootRespawnAwarenessTooltip")
     addTick(options, "showStatusIndicator", "IGUI_SM_OptionShowStatusIndicator",
         "IGUI_SM_OptionShowStatusIndicatorTooltip")
 
@@ -240,6 +247,10 @@ function ModOptions.register()
     local markerSize = options:addSlider("markerSizePercent", "IGUI_SM_OptionMarkerSize",
         75, 150, 5, Settings.DEFAULTS.markerSizePercent, "IGUI_SM_OptionMarkerSizeTooltip")
     liveApply(markerSize, "value")
+    addTick(options, "fadeDistantMarkers", "IGUI_SM_OptionFadeMarkers", "IGUI_SM_OptionFadeMarkersTooltip")
+    local radius = options:addSlider("markerFocusRadius", "IGUI_SM_OptionMarkerRadius",
+        50, 2000, 50, Settings.DEFAULTS.markerFocusRadius, "IGUI_SM_OptionMarkerRadiusTooltip")
+    liveApply(radius, "value")
 
     ModOptions.registered = true
     PZAPI.ModOptions:load()

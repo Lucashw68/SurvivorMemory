@@ -4,6 +4,7 @@ require "SurvivorMemory/MemoryPanel"
 require "SurvivorMemory/LocationName"
 require "SurvivorMemory/StatusPresentation"
 require "SurvivorMemory/TimeFormat"
+require "SurvivorMemory/MapTooltip"
 require "SurvivorMemory/PlaceDesignation"
 require "SurvivorMemory/ModOptions"
 
@@ -13,6 +14,7 @@ SurvivorMemory.MemoryStatusIndicator = SurvivorMemory.MemoryStatusIndicator or {
 local Indicator = SurvivorMemory.MemoryStatusIndicator
 local StatusPresentation = SurvivorMemory.StatusPresentation
 local LocationName = SurvivorMemory.LocationName
+local MapTooltip = SurvivorMemory.MapTooltip
 local TimeFormat = SurvivorMemory.TimeFormat
 local UICompat = SurvivorMemory.UICompat
 local PlaceDesignation = SurvivorMemory.PlaceDesignation
@@ -90,11 +92,18 @@ end
 local function updateTooltip(button)
     local memory = button.memory
     if not memory then return end
-    button:setTooltip(getText("IGUI_SM_IndicatorTooltip",
-        LocationName.text(memory),
+    local locationLines = MapTooltip.wrap(LocationName.text(memory), UIFont.Small, 240)
+    local tooltip = getText("IGUI_SM_IndicatorTooltip",
+        table.concat(locationLines, "\n"),
         StatusPresentation.text(memory.status),
         tostring(memory.visitCount or 0),
-        TimeFormat.age(TimeFormat.worldAgeHours(), memory.lastVisited)))
+        TimeFormat.age(TimeFormat.worldAgeHours(), memory.lastVisited))
+    local notice = SurvivorMemory.Runtime.lootRespawnNotice(button.playerNum, memory)
+    if notice then
+        tooltip = tooltip .. "\n" .. getText(notice == "CONFIRMED"
+            and "IGUI_SM_LootRespawnConfirmed" or "IGUI_SM_LootRespawnPossible")
+    end
+    button:setTooltip(tooltip)
 end
 
 local function updatePresentation(button)

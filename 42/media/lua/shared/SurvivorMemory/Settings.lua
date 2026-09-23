@@ -10,6 +10,8 @@ Settings.DEFAULTS = {
     buildingMemoryEnabled = true,
     rememberRooms = true,
     rememberContainers = true,
+    itemMemoryEnabled = true,
+    lootRespawnAwareness = true,
     showStatusIndicator = true,
     placesEnabled = true,
     allowPlaceDesignations = true,
@@ -30,6 +32,8 @@ Settings.DEFAULTS = {
     showImportantMemoryMarkers = true,
     showVehicleMarkers = true,
     markerSizePercent = 100,
+    fadeDistantMarkers = true,
+    markerFocusRadius = 300,
 }
 
 local function bool(values, key)
@@ -64,6 +68,11 @@ function Settings.enabled(values, feature)
     if feature == "buildingMemory" then return building end
     if feature == "rooms" then return building and bool(values, "rememberRooms") end
     if feature == "containers" then return building and bool(values, "rememberContainers") end
+    if feature == "itemMemory" then return building and bool(values, "itemMemoryEnabled") end
+    if feature == "lootRespawnAwareness" then
+        return building and bool(values, "rememberContainers")
+            and bool(values, "lootRespawnAwareness")
+    end
     if feature == "statusIndicator" then return building and bool(values, "showStatusIndicator") end
     if feature == "places" then return places end
     if feature == "placeDesignations" then return places and bool(values, "allowPlaceDesignations") end

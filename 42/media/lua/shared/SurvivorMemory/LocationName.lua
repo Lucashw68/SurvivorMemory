@@ -4,8 +4,9 @@ SurvivorMemory.LocationName = SurvivorMemory.LocationName or {}
 local LocationName = SurvivorMemory.LocationName
 
 local ROOM_KINDS = {
-    bedroom = "HOUSE", bathroom = "HOUSE", livingroom = "HOUSE",
-    kitchen = "HOUSE", diningroom = "HOUSE", closet = "HOUSE",
+    -- Shared service rooms (kitchen, bathroom, diningroom, closet) do not
+    -- establish a residential use: shops and workplaces have them too.
+    bedroom = "HOUSE", livingroom = "HOUSE",
     garage = "GARAGE", garagestorage = "GARAGE",
     office = "OFFICE", meetingroom = "OFFICE",
     warehouse = "WAREHOUSE", storageunit = "WAREHOUSE", factory = "FACTORY",
@@ -19,11 +20,11 @@ local ROOM_KINDS = {
     bank = "BANK", hotelroom = "HOTEL", motelroom = "HOTEL",
 }
 
-local PRIORITY = {
-    BUILDING = 0, HOUSE = 1, GARAGE = 1, STORE = 2, OFFICE = 2,
-    WAREHOUSE = 3, FACTORY = 3, GROCERY = 3, RESTAURANT = 3, BAR = 3,
-    MEDICAL = 3, POLICE = 3, FIRE_STATION = 3, SCHOOL = 3, CHURCH = 3,
-    BANK = 3, HOTEL = 3,
+local VALID_KINDS = {
+    BUILDING = true, HOUSE = true, GARAGE = true, STORE = true, OFFICE = true,
+    WAREHOUSE = true, FACTORY = true, GROCERY = true, RESTAURANT = true, BAR = true,
+    MEDICAL = true, POLICE = true, FIRE_STATION = true, SCHOOL = true, CHURCH = true,
+    BANK = true, HOTEL = true,
 }
 
 local function normalized(value)
@@ -35,42 +36,64 @@ function LocationName.kindFromRoomName(roomName)
 end
 
 function LocationName.isValidKind(kind)
-    return type(kind) == "string" and PRIORITY[kind] ~= nil
+    return type(kind) == "string" and VALID_KINDS[kind] == true
 end
 
-function LocationName.choose(currentKind, observedKind)
-    currentKind = currentKind or "BUILDING"
-    if not observedKind then return currentKind end
-    if (PRIORITY[observedKind] or 0) > (PRIORITY[currentKind] or 0) then
-        return observedKind
-    end
-    return currentKind
+-- Decode only our persisted r1 identity, never fetch a room from the world.
+local function rememberedRoomName(key, buildingKey)
+    if type(key) ~= "string" then return nil end
+    local length, start = key:match("^r1:(%d+):()")
+    length = tonumber(length)
+    if not length or length > #key then return nil end
+    if key:sub(start, start + length - 1) ~= buildingKey then return nil end
+    local nameLength, name = key:sub(start + length):match(
+        "^:%-?%d+:%-?%d+:%-?%d+:%-?%d+:%-?%d+:(%d+):(.*)$")
+    if name and #name == tonumber(nameLength) then return name end
 end
 
-function LocationName.observe(memory, building, room)
-    if not memory then return false end
-    local roomKind
-    if room and room:getRoomDef() then
-        roomKind = LocationName.kindFromRoomName(room:getRoomDef():getName())
-    end
-    local kind = roomKind
-    if building and building:getDef() then
-        local def = building:getDef()
-        if def:isResidential() and (not roomKind or roomKind == "HOUSE" or roomKind == "GARAGE") then
-            kind = "HOUSE"
-        elseif def:isShop() and (not roomKind or roomKind == "HOUSE") then
-            kind = "STORE"
+function LocationName.initialize(memory, rebuild)
+    if rebuild or type(memory.locationKinds) ~= "table" then
+        memory.locationKinds = {}
+        for key in pairs(memory.roomsKnown or {}) do
+            local kind = LocationName.kindFromRoomName(rememberedRoomName(key, memory.buildingKey))
+            if kind then memory.locationKinds[kind] = true end
         end
     end
-    local chosen = LocationName.choose(memory.locationKind, kind)
-    if chosen == (memory.locationKind or "BUILDING") then return false end
-    memory.locationKind = chosen
+    for kind, known in pairs(memory.locationKinds) do
+        if known ~= true or kind == "BUILDING" or not LocationName.isValidKind(kind) then
+            memory.locationKinds[kind] = nil
+        end
+    end
+end
+
+function LocationName.observe(memory, room)
+    if not memory or not room then return false end
+    local def = room:getRoomDef()
+    local kind = def and LocationName.kindFromRoomName(def:getName()) or nil
+    if not kind then return false end
+    if type(memory.locationKinds) ~= "table" then LocationName.initialize(memory) end
+    if memory.locationKinds[kind] then return false end
+    memory.locationKinds[kind] = true
     return true
 end
 
+function LocationName.merge(target, source)
+    LocationName.initialize(target)
+    LocationName.initialize(source)
+    for kind in pairs(source.locationKinds) do target.locationKinds[kind] = true end
+end
+
 function LocationName.text(memory)
-    local kind = memory and memory.locationKind or "BUILDING"
-    return getText("IGUI_SM_Location_" .. kind)
+    local kinds, labels = {}, {}
+    for kind, known in pairs(memory and memory.locationKinds or {}) do
+        if known == true and kind ~= "BUILDING" and LocationName.isValidKind(kind) then
+            kinds[#kinds + 1] = kind
+        end
+    end
+    table.sort(kinds) -- Stable across visit order and save/reload.
+    for _, kind in ipairs(kinds) do labels[#labels + 1] = getText("IGUI_SM_Location_" .. kind) end
+    if #labels == 0 then return getText("IGUI_SM_Location_BUILDING") end
+    return table.concat(labels, " / ")
 end
 
 return LocationName

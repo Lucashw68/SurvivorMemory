@@ -74,6 +74,33 @@ la corriger à l'insu du personnage.
   toute ouverture de la World Map.
 - Les filtres d'affichage avancés de l'overlay World Map restent optionnels.
 
+### Cohérence de la World Map et des bâtiments multi-niveaux
+
+Implémentation locale du 23 septembre 2026, non publiée :
+
+- **Atténuation par distance :** option native activée par défaut, rayon de
+  300 cases réglable de 50 à 2 000. Opacité ordinaire de 100 % dans le rayon,
+  diminuant progressivement jusqu'à 25 % à deux fois le rayon. Le survol
+  rétablit 100 %. Aucune mémoire n'est effacée ou réobservée.
+- **Hiérarchie personnelle :** HOME/OUTPOST et véhicules personnels dessinés
+  après les marqueurs ordinaires, avec une opacité minimale de 85 %. Les lieux
+  conservent leurs icônes dédiées ; les véhicules personnels conservent la
+  voiture, légèrement agrandie et dotée d'un petit repère doré. Les positions
+  des véhicules restent strictement leurs dernières positions observées.
+- **Point rouge du joueur :** redessiné après les marqueurs avec les règles
+  vanilla B42 (joueurs locaux vivants, option Players, zoom inférieur à 20).
+  Aucun symbole persistant n'est ajouté ; le modèle vanilla à fort zoom reste
+  inchangé.
+- **Sous-sols :** alias persistants v9 créés lors d'un passage observé entre
+  deux cases occupées proches, sur des niveaux consécutifs dont un négatif,
+  avec preuve d'escalier. Les souvenirs sont regroupés sans scan global ; les
+  historiques originaux sont conservés. Pas de fusion sur simple recouvrement
+  des bounds, tunnel horizontal, chargement ou téléportation distante.
+  Les anciennes mémoires séparées sont réunies lors d'une nouvelle traversée
+  admissible, pas rétroactivement au chargement. Les accès extérieurs sans
+  bâtiment de surface identifié restent séparés. Voir
+  [les règles et limites](map-and-basement-memory.md).
+
 ## Places That Matter
 
 **État : V1 implémentée dans Survivor Memory 1.2.0.**
@@ -368,6 +395,16 @@ mémoires personnelles.
 4. **Livré et validé en jeu :** marqueur de dernière position connue et tooltip.
 5. **À suivre prudemment :** oubli après absence localement constatée, cas
    remorque/destruction et validation manuelle du clic mécanique.
+
+## Souvenirs d'objets sélectionnés
+
+Implémentation locale : action volontaire dans le menu de loot pour mémoriser
+un objet précis (par exemple une boîte de clous), sa quantité sélectionnée,
+son conteneur et sa date. Le tooltip du bâtiment sur la World Map reprend
+l'icône réelle de l'objet. Le clic droit du marqueur permet l'oubli manuel.
+Introduit dans le format v8, repris dans le v9 avec les sous-sols ; option
+native dédiée, aucune indexation automatique
+du loot ordinaire. Voir le [contrat](item-memory-contract.md).
 
 ## Future / Deferred
 

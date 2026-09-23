@@ -101,4 +101,10 @@ if [ "$mode" = building ] && [ "$with_neatui" = 1 ]; then
     if [ -f "$cache_dir/Screenshots/survivor-memory-panel.png" ]; then cp "$cache_dir/Screenshots/survivor-memory-panel.png" "$project_dir/tests/results/screenshots/survivor-memory-panel.png"; fi
     if [ -f "$cache_dir/Screenshots/survivor-memory-world-map.png" ]; then cp "$cache_dir/Screenshots/survivor-memory-world-map.png" "$project_dir/tests/results/screenshots/survivor-memory-world-map.png"; fi
 fi
+if [ "$mode" = building ] && [ -f "$cache_dir/Screenshots/survivor-memory-item-tooltip.png" ]; then
+    cp "$cache_dir/Screenshots/survivor-memory-item-tooltip.png" "$project_dir/tests/results/screenshots/survivor-memory-item-tooltip-$variant.png"
+fi
+if [ "$mode" = building ] && [ -f "$cache_dir/Screenshots/survivor-memory-tooltip-cards.png" ]; then
+    cp "$cache_dir/Screenshots/survivor-memory-tooltip-cards.png" "$project_dir/tests/results/screenshots/survivor-memory-tooltip-cards-$variant.png"
+fi
 case "$result" in *'status=PASS'*) exit 0 ;; *) exit 1 ;; esac

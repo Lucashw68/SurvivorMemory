@@ -65,15 +65,36 @@ public final class SurvivorMemoryAutoStartAgent {
             Object memory = firstValue(buildings);
             Object vehicleMemories = rawget(root, "vehicleMemories");
             Object vehicleMemory = firstValue(vehicleMemories);
-            boolean pass = ((Number) schema).intValue() == 6
+            Object basement = rawget(rawget(root, "debug"), "basementFixture");
+            Object basementAliases = rawget(basement, "buildingAliases");
+            Object basementParent = firstValue(basementAliases);
+            Object basementMemory = rawget(rawget(basement, "buildings"), basementParent == null ? "" : basementParent.toString());
+            Object expectedKinds = rawget(rawget(root, "debug"), "expectedLocationKinds");
+            Object locationKinds = rawget(memory, "locationKinds");
+            boolean labelsMatch = expectedKinds != null && locationKinds != null
+                && count(expectedKinds) == count(locationKinds);
+            if (labelsMatch) {
+                var iterator = ((KahluaTable) expectedKinds).iterator();
+                while (iterator.advance()) {
+                    if (!Boolean.TRUE.equals(rawget(locationKinds, iterator.getKey()))) labelsMatch = false;
+                }
+            }
+            boolean pass = ((Number) schema).intValue() == 10
+                && labelsMatch
+                && count(basementAliases) == 1
+                && count(rawget(basement, "buildings")) == 1
+                && count(rawget(basement, "linkedBuildingHistory")) == 2
+                && ((Number) rawget(basementMemory, "visitCount")).intValue() == 1
                 && count(buildings) == 1
                 && count(vehicleMemories) == 1
                 && Boolean.TRUE.equals(rawget(vehicleMemory, "personal"))
                 && ((Number) rawget(memory, "visitCount")).intValue() == 2
                 && count(rawget(memory, "roomsKnown")) == 2
                 && count(rawget(memory, "containersInspected")) == 2
+                && count(rawget(memory, "itemMemories")) == 1
+                && "Base.NailsBox".equals(rawget(firstValue(rawget(memory, "itemMemories")), "itemType"))
+                && rawget(firstValue(rawget(memory, "itemMemories")), "textureName") != null
                 && ((Number) rawget(root, "revision")).intValue() > 0
-                && "HOUSE".equals(rawget(memory, "locationKind"))
                 && "HOME".equals(rawget(memory, "placeDesignation"))
                 && rawget(memory, "emotionalMemory") != null
                 && rawget(rawget(memory, "emotionalMemory"), "observedAt") != null

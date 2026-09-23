@@ -1,5 +1,6 @@
 require "SurvivorMemory/Runtime"
 require "SurvivorMemory/MemoryPanel"
+require "SurvivorMemory/ItemMemoryContext"
 
 debugScenarios = debugScenarios or {}
 if SM_SMOKE_MODE ~= true then return end
@@ -87,6 +88,36 @@ local function finish()
     getCore():quitToDesktop()
 end
 
+-- Test-only bounded lookup in the vanilla basement zone at 7121,8329.
+-- No equivalent world enumeration exists in production observation code.
+local function findBasementStairPair()
+    for x = 7119, 7134 do
+        for y = 8327, 8345 do
+            local lower = getCell():getGridSquare(x, y, -1)
+            if lower and lower:HasStairs() and lower:getBuilding() then
+                for dx = -1, 1 do
+                    for dy = -1, 1 do
+                        local upper = getCell():getGridSquare(x + dx, y + dy, 0)
+                        if upper and upper:getBuilding() and upper:getFloor() then
+                            return upper, lower
+                        end
+                    end
+                end
+            end
+        end
+    end
+end
+
+local function restoreBasementFixture(player)
+    local testRoot = player:getModData().SurvivorMemory
+    Runner.basementOriginalRoot.debug.basementFixture = testRoot
+    player:getModData().SurvivorMemory = Runner.basementOriginalRoot
+    SurvivorMemory.Runtime.players[0] = Runner.basementOriginalState
+    moveTo(player, Runner.basementOriginalSquare)
+    save(true)
+    Runner.phase, Runner.tick = 83, 0
+end
+
 local function onTick()
     Runner.tick = Runner.tick + 1
     local player = getPlayer()
@@ -95,12 +126,18 @@ local function onTick()
         local nativeOptions = PZAPI and PZAPI.ModOptions
             and PZAPI.ModOptions:getOptions("SurvivorMemory") or nil
         check(nativeOptions ~= nil, "native_mod_options_registered")
+        check(nativeOptions and nativeOptions:getOption("fadeDistantMarkers") ~= nil
+                and nativeOptions:getOption("markerFocusRadius") ~= nil,
+            "native_map_distance_options_registered")
         check(nativeOptions and nativeOptions:getOption("buildingMemoryEnabled")
                 and nativeOptions:getOption("buildingMemoryEnabled"):getValue() == true,
             "native_building_memory_default_enabled")
         check(nativeOptions and nativeOptions:getOption("markerSizePercent")
                 and nativeOptions:getOption("markerSizePercent"):getValue() == 100,
             "native_marker_size_default")
+        check(nativeOptions and nativeOptions:getOption("lootRespawnAwareness")
+                and nativeOptions:getOption("lootRespawnAwareness"):getValue() == true,
+            "native_loot_respawn_awareness_default_enabled")
         local keyOption = nativeOptions and nativeOptions:getOption("recallPanelKey") or nil
         check(keyOption and keyOption.name == "IGUI_SM_OptionRecallPanelKey",
             "native_keybind_uses_translation_key")
@@ -130,6 +167,8 @@ local function onTick()
         check(roomsOption and roomsOption.isEnabled == true,
             "native_category_restores_child_immediately")
         check(SurvivorMemory.UICompat ~= nil, "ui_compat_loaded")
+        check(SurvivorMemory.Runtime.transferHooksInstalled == true,
+            "loot_respawn_transfer_hook_installed")
         check(SurvivorMemory.UICompat and SurvivorMemory.UICompat.neatAvailable == SM_EXPECT_NEATUI,
             "ui_backend_expected", "neat=" .. tostring(SurvivorMemory.UICompat and SurvivorMemory.UICompat.neatAvailable))
         Runner.fixture = findFixture(player)
@@ -249,7 +288,10 @@ local function onTick()
         if not memory then finish() return end
         Runner.firstVisited = memory.firstVisited
         check(memory.visitCount == 1, "first_visit_count", "value=" .. tostring(memory.visitCount))
-        check(memory.locationKind ~= "BUILDING", "observed_location_kind", "value=" .. tostring(memory.locationKind))
+        local roomKind = SurvivorMemory.LocationName.kindFromRoomName(
+            player:getCurrentSquare():getRoom():getRoomDef():getName())
+        check(type(memory.locationKinds) == "table" and (not roomKind or memory.locationKinds[roomKind]),
+            "observed_location_labels", "value=" .. SurvivorMemory.LocationName.text(memory))
         local indicator = SurvivorMemory.MemoryStatusIndicator and SurvivorMemory.MemoryStatusIndicator.currentButton(0)
         check(indicator and indicator:isVisible(), "memory_status_indicator_visible")
         check(applyNativeOption("showStatusIndicator", false),
@@ -283,6 +325,21 @@ local function onTick()
         local stats = SurvivorMemory.MemoryStore.stats(nil, memory)
         check(stats.roomsKnown >= math.min(2, #Runner.fixture.rooms), "rooms_unique", "count=" .. stats.roomsKnown)
         check(stats.containersInspected >= math.min(2, #Runner.fixture.containers), "containers_inspected", "count=" .. stats.containersInspected)
+        local expectedKinds = {}
+        for index = 1, math.min(2, #Runner.fixture.rooms) do
+            local kind = SurvivorMemory.LocationName.kindFromRoomName(
+                Runner.fixture.rooms[index]:getRoom():getRoomDef():getName())
+            if kind then expectedKinds[kind] = true end
+        end
+        local labelsMatch = true
+        for kind in pairs(expectedKinds) do
+            if not memory.locationKinds[kind] then labelsMatch = false end
+        end
+        for kind in pairs(memory.locationKinds) do
+            if not expectedKinds[kind] then labelsMatch = false end
+        end
+        check(labelsMatch, "classification_uses_only_entered_rooms")
+        select(2, SurvivorMemory.Runtime.currentMemory(0)).debug.expectedLocationKinds = expectedKinds
         local indicator = SurvivorMemory.MemoryStatusIndicator and SurvivorMemory.MemoryStatusIndicator.currentButton(0)
         local staleColor = SurvivorMemory.StatusPresentation.color(SurvivorMemory.MemoryStore.Status.VISITED)
         if indicator then
@@ -329,7 +386,29 @@ local function onTick()
             "outpost_map_marker_selected")
         check(SurvivorMemory.WorldMapOverlay.markerSizeFor(memory, 20) == 33,
             "outpost_marker_scaled_up")
+        local respawnContainer = Runner.fixture.containers[1]
+        local respawnKey = respawnContainer
+            and SurvivorMemory.ContainerIdentity.fromContainer(respawnContainer) or nil
+        local root = select(2, SurvivorMemory.Runtime.currentMemory(0))
+        local confirmedBefore = root.debug.lootRespawnsConfirmed or 0
+        if respawnContainer and respawnKey then
+            SurvivorMemory.MemoryStore.markContainerLooted(memory, respawnKey,
+                getGameTime():getWorldAgeHours(), true)
+            respawnContainer:setHasBeenLooted(false)
+            SurvivorMemory.Runtime.inspectContainer({ player = 0 }, respawnContainer)
+        end
+        check((root.debug.lootRespawnsConfirmed or 0) == confirmedBefore + 1,
+            "vanilla_loot_respawn_flag_transition_confirmed")
+        check(SurvivorMemory.Runtime.lootRespawnNotice(0, memory) == "CONFIRMED",
+            "confirmed_loot_respawn_exposed_to_ui")
+        check(memory.status == SurvivorMemory.MemoryStore.Status.PARTIALLY_SEARCHED,
+            "confirmed_loot_respawn_refreshes_other_container_progress")
         for _, key in ipairs(temporaryInspections) do memory.containersInspected[key] = nil end
+        if Runner.fixture.containers[2] then
+            SurvivorMemory.Runtime.inspectContainer({ player = 0 }, Runner.fixture.containers[2])
+        end
+        check(SurvivorMemory.MemoryStore.stats(nil, memory).containersInspected == 2,
+            "known_container_can_be_reinspected_after_respawn")
         SurvivorMemory.MemoryStore.recomputeStatus(memory)
         SurvivorMemory.Runtime.setCurrentPlaceDesignation(0, SurvivorMemory.PlaceDesignation.HOME)
         check(indicator and indicator:isVisible(), "partial_home_indicator_restored")
@@ -357,6 +436,36 @@ local function onTick()
         local emotionalSnapshot = SurvivorMemory.Runtime.debugSnapshot(0)
         emotionalSnapshot.state.emotionalDangerThisVisit = true
         check(memory.emotionalMemory ~= nil, "emotional_memory_seeded_for_runtime_smoke")
+        local container = Runner.fixture.containers[1]
+        moveTo(player, container:getSourceGrid())
+        Runner.rememberedItem = container:AddItem("Base.NailsBox")
+        local loot = getPlayerLoot(0)
+        loot:setVisible(true)
+        loot:setPinned()
+        loot:setNewContainer(container)
+        Runner.phase, Runner.tick = 33, 0
+    elseif Runner.phase == 33 and Runner.tick > 10 then
+        local loot = getPlayerLoot(0)
+        loot:setNewContainer(Runner.fixture.containers[1])
+        local memory = SurvivorMemory.Runtime.currentMemory(0)
+        local context = ISContextMenu.get(0, 100, 100)
+        SurvivorMemory.ItemMemoryContext.fill(0, context, { Runner.rememberedItem })
+        local option = context:getOptionFromName(getText("IGUI_SM_RememberItems"))
+        check(option ~= nil, "selected_item_context_action_available")
+        if option then option.onSelect(option.target, option.param1) end
+        local entries = SurvivorMemory.ItemMemory.all(memory)
+        check(#entries == 1 and entries[1].observation.itemType == "Base.NailsBox",
+            "selected_box_of_nails_remembered")
+        check(#entries == 1 and entries[1].observation.textureName
+                and getTexture(entries[1].observation.textureName) ~= nil,
+            "selected_item_texture_resolves")
+        if option then option.onSelect(option.target, option.param1) end
+        check(#SurvivorMemory.ItemMemory.all(memory) == 1, "selected_item_repeat_not_duplicated")
+        loot:setVisible(false)
+        check(SurvivorMemory.Runtime.rememberItems(0, { Runner.rememberedItem }) == false,
+            "closed_loot_ui_rejects_item_selection")
+        loot:setVisible(true)
+        context:closeAll()
         SurvivorMemory.MemoryPanel.open(0); Runner.phase, Runner.tick = 4, 0
     elseif Runner.phase == 4 and Runner.tick > 45 then
         local ok, err = pcall(function() getCore():TakeFullScreenshot("survivor-memory-panel.png") end)
@@ -439,6 +548,8 @@ local function onTick()
             and Runner.mapContext:getOptionFromName(getText("IGUI_SM_MapMarkOutpost")) or nil
         check(reopenedOutpost and reopenedOutpost.checkMark == true,
             "world_map_outpost_action_checked")
+        check(Runner.mapContext and Runner.mapContext:getOptionFromName(getText("IGUI_SM_ForgetItemMenu")),
+            "map_item_forget_menu_available")
         Runner.phase, Runner.tick = 46, 0
     elseif Runner.phase == 46 and Runner.tick > 10 then
         check(Runner.mapContext and Runner.mapContext:getIsVisible(), "world_map_context_visible")
@@ -452,6 +563,46 @@ local function onTick()
             root.revision = (tonumber(root.revision) or 0) + 1
         end
         if Runner.mapContext then Runner.mapContext:closeAll() end
+        local map = ISWorldMap.instance
+        SurvivorMemory.WorldMapOverlay.render(map)
+        check(SurvivorMemory.WorldMapOverlay.hasObjectBadge(map, memory),
+            "remembered_objects_badge_on_home_marker")
+        local originalRect = map.drawRect
+        local redDots = 0
+        map.drawRect = function(self, x, y, w, h, a, r, g, b)
+            if w == 6 and h == 6 and a == 1 and r == 1 and g == 0 and b == 0 then
+                redDots = redDots + 1
+            end
+            return originalRect(self, x, y, w, h, a, r, g, b)
+        end
+        SurvivorMemory.WorldMapOverlay.drawPlayerDots(map)
+        map.drawRect = originalRect
+        check(redDots == 1, "vanilla_red_player_dot_redrawn_above_markers")
+        for _, kind in ipairs({ "GENERATOR", "GAS_PUMP", "WOOD_STOVE" }) do
+            check(SurvivorMemory.MapTooltip.importantIcon(kind) ~= nil, "important_tooltip_icon_" .. kind)
+        end
+        Runner.originalMapRender = map.render
+        map.render = function(self)
+            Runner.originalMapRender(self)
+            SurvivorMemory.WorldMapOverlay.drawBuildingTooltip(self, memory, 140, 130)
+        end
+        Runner.phase, Runner.tick = 47, 0
+    elseif Runner.phase == 47 and Runner.tick > 20 then
+        local ok, err = pcall(function() getCore():TakeFullScreenshot("survivor-memory-item-tooltip.png") end)
+        check(ok, "item_tooltip_screenshot", "error=" .. tostring(err))
+        local vehicle = SurvivorMemory.VehicleMemory.all(select(2, SurvivorMemory.Runtime.currentMemory(0)))[1]
+        ISWorldMap.instance.render = function(self)
+            Runner.originalMapRender(self)
+            SurvivorMemory.WorldMapOverlay.drawVehicleTooltip(self, vehicle, 130, 130)
+            -- Presentation fixture only: does not create an unobserved stove memory.
+            SurvivorMemory.WorldMapOverlay.drawImportantTooltip(self,
+                { kind = "WOOD_STOVE", observedAt = getGameTime():getWorldAgeHours() }, 550, 130)
+        end
+        Runner.phase, Runner.tick = 48, 0
+    elseif Runner.phase == 48 and Runner.tick > 20 then
+        local ok, err = pcall(function() getCore():TakeFullScreenshot("survivor-memory-tooltip-cards.png") end)
+        check(ok, "vehicle_and_stove_tooltip_screenshot", "error=" .. tostring(err))
+        ISWorldMap.instance.render = Runner.originalMapRender
         if ISWorldMap.instance then ISWorldMap.instance:close() end
         moveTo(player, Runner.fixture.outside)
         Runner.ageBeforeWait = getGameTime():getWorldAgeHours()
@@ -481,6 +632,42 @@ local function onTick()
         log("SAVE requested=true first=" .. tostring(memory.firstVisited) .. " last=" .. tostring(memory.lastVisited))
         Runner.phase, Runner.tick = 7, 0
     elseif Runner.phase == 7 and Runner.tick > 90 then
+        Runner.basementOriginalRoot = player:getModData().SurvivorMemory
+        Runner.basementOriginalState = SurvivorMemory.Runtime.players[0]
+        Runner.basementOriginalSquare = player:getCurrentSquare()
+        player:getModData().SurvivorMemory = nil
+        SurvivorMemory.Runtime.resetPlayer(0)
+        player:setX(7124.5); player:setY(8331.5); player:setZ(0)
+        player:setLastX(player:getX()); player:setLastY(player:getY()); player:setLastZ(0)
+        Runner.phase, Runner.tick = 80, 0
+    elseif Runner.phase == 80 and Runner.tick > 90 then
+        Runner.basementUpper, Runner.basementLower = findBasementStairPair()
+        check(Runner.basementUpper ~= nil, "real_vanilla_basement_stair_fixture")
+        if not Runner.basementUpper then restoreBasementFixture(player) return end
+        -- Discard arrival observations in this separate test character store.
+        player:getModData().SurvivorMemory = nil
+        SurvivorMemory.Runtime.resetPlayer(0)
+        moveTo(player, Runner.basementUpper)
+        SurvivorMemory.Runtime.onPlayerUpdate(player)
+        Runner.basementParentKey = SurvivorMemory.BuildingIdentity.fromBuilding(Runner.basementUpper:getBuilding()).key
+        Runner.basementChildKey = SurvivorMemory.BuildingIdentity.fromBuilding(Runner.basementLower:getBuilding()).key
+        log("BASEMENT upper=" .. Runner.basementParentKey .. " lower=" .. Runner.basementChildKey)
+        Runner.phase, Runner.tick = 81, 0
+    elseif Runner.phase == 81 and Runner.tick > 5 then
+        moveTo(player, Runner.basementLower)
+        SurvivorMemory.Runtime.onPlayerUpdate(player)
+        local memory, root = SurvivorMemory.Runtime.currentMemory(0)
+        check(memory and memory.buildingKey == Runner.basementParentKey,
+            "real_basement_uses_surface_memory")
+        check(memory and memory.visitCount == 1, "real_basement_no_extra_visit")
+        check(root and SurvivorMemory.BuildingLinks.resolve(root, Runner.basementChildKey) == Runner.basementParentKey,
+            "real_basement_identity_resolves")
+        moveTo(player, Runner.basementUpper)
+        SurvivorMemory.Runtime.onPlayerUpdate(player)
+        memory = SurvivorMemory.Runtime.currentMemory(0)
+        check(memory and memory.visitCount == 1, "real_return_upstairs_no_extra_visit")
+        restoreBasementFixture(player)
+    elseif Runner.phase == 83 and Runner.tick > 60 then
         Events.OnTick.Remove(onTick); finish()
     end
 end
@@ -490,6 +677,7 @@ debugScenarios.SurvivorMemorySmokeScenario = {
     forceLaunch = true,
     startLoc = { x = 7090, y = 8371, z = 0 },
     setSandbox = function()
+        SandboxVars.Basement = { SpawnFrequency = 7 }
         SandboxVars.Zombies = 6
         SandboxVars.LootItemRemovalList = ""
         SandboxVars.ZombieConfig = SandboxVars.ZombieConfig or {}

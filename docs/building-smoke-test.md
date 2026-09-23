@@ -1,9 +1,16 @@
 # Smoke test bâtiment B42
 
 L'unique hook public `make smoke` utilise le harness save-cycle de PzModTools
-0.4.0 dans deux caches isolés : avec NeatUI, puis avec Survivor Memory seul.
+0.4.1 dans deux caches isolés : avec NeatUI, puis avec Survivor Memory seul.
 Chaque variante enchaîne création, sauvegarde et reload. Le scan du fixture est confiné au test; le runtime de
 production ne scanne jamais un bâtiment.
+
+Le scénario courant inclut aussi l'action de souvenir d'objet sélectionné,
+son icône dans le tooltip, le point rouge joueur redessiné et une liaison de
+sous-sol vanilla observée sur des cases réelles. Voir
+[les règles de carte/sous-sol](map-and-basement-memory.md) et
+[le contrat d'objets](item-memory-contract.md). Les déplacements du fixture
+utilisent le debug ; ils ne remplacent pas une QA manuelle des escaliers moddés.
 
 Exécution Vehicle Memory du 1er septembre 2026, build 42.20.4: **PASS**.
 

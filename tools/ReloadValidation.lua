@@ -41,7 +41,26 @@ local function validateReload()
         if not condition then table.insert(failures, name) end
         log("CHECK " .. (condition and "PASS" or "FAIL") .. " name=" .. name)
     end
-    check(root and root.schemaVersion == 6, "schema_v6")
+    check(root and root.schemaVersion == 10, "schema_v10")
+    local labelsMatch = memory and type(memory.locationKinds) == "table"
+        and root.debug.expectedLocationKinds ~= nil
+    for kind in pairs(root and root.debug.expectedLocationKinds or {}) do
+        if not memory or not memory.locationKinds[kind] then labelsMatch = false end
+    end
+    for kind in pairs(memory and memory.locationKinds or {}) do
+        if not root.debug.expectedLocationKinds[kind] then labelsMatch = false end
+    end
+    check(labelsMatch, "observed_location_labels_preserved")
+    local basement = root and root.debug.basementFixture
+    local basementSource, basementTarget
+    for source, targetKey in pairs(basement and basement.buildingAliases or {}) do
+        basementSource, basementTarget = source, targetKey; break
+    end
+    check(basementSource and basementTarget and basement.buildings[basementTarget]
+            and basement.buildings[basementSource] == nil
+            and basement.buildings[basementTarget].visitCount == 1
+            and basement.linkedBuildingHistory[basementSource] ~= nil,
+        "real_basement_alias_and_history_preserved")
     check(buildingCount == 1, "one_building")
     check(memory and memory.visitCount == 2, "visit_count_preserved")
     check(memory and SurvivorMemory.MemoryStore.stats(nil, memory).roomsKnown == 2, "rooms_preserved")
@@ -49,6 +68,10 @@ local function validateReload()
     check(memory and memory.firstVisited < memory.lastVisited, "timestamps_preserved")
     check(memory and memory.status == SurvivorMemory.MemoryStore.Status.PARTIALLY_SEARCHED, "status_preserved")
     check(memory and memory.placeDesignation == SurvivorMemory.PlaceDesignation.HOME, "home_designation_preserved")
+    local items = SurvivorMemory.ItemMemory.all(memory)
+    check(#items == 1 and items[1].observation.itemType == "Base.NailsBox"
+            and items[1].observation.quantityObserved == 1
+            and items[1].observation.textureName ~= nil, "selected_item_memory_preserved")
     check(memory and memory.emotionalMemory and memory.emotionalMemory.observedAt ~= nil,
         "emotional_memory_preserved")
     check(memory and memory.emotionalMemory and memory.emotionalMemory.lastReactionAt ~= nil,

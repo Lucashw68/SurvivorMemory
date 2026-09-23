@@ -6,13 +6,17 @@ require "SurvivorMemory/PlaceDesignation"
 require "SurvivorMemory/EmotionalMemory"
 require "SurvivorMemory/ImportantMemory"
 require "SurvivorMemory/VehicleMemory"
+require "SurvivorMemory/LootRespawnMemory"
+require "SurvivorMemory/ItemMemory"
+require "SurvivorMemory/BuildingLinks"
 
 local MemoryStore = SurvivorMemory.MemoryStore
 local PlaceDesignation = SurvivorMemory.PlaceDesignation
 local EmotionalMemory = SurvivorMemory.EmotionalMemory
 local ImportantMemory = SurvivorMemory.ImportantMemory
 local VehicleMemory = SurvivorMemory.VehicleMemory
-MemoryStore.SCHEMA_VERSION = 6
+local LootRespawnMemory = SurvivorMemory.LootRespawnMemory
+MemoryStore.SCHEMA_VERSION = 10
 MemoryStore.MOD_DATA_KEY = "SurvivorMemory"
 MemoryStore.Status = {
     VISITED = "VISITED",
@@ -36,7 +40,7 @@ local function sanitizeObservations(values)
     return values
 end
 
-local function sanitizeBuilding(key, memory)
+local function sanitizeBuilding(key, memory, rebuildLabels)
     if type(key) ~= "string" or type(memory) ~= "table" then return nil end
     local firstVisited = tonumber(memory.firstVisited)
     local lastVisited = tonumber(memory.lastVisited)
@@ -58,6 +62,10 @@ local function sanitizeBuilding(key, memory)
     if not SurvivorMemory.LocationName.isValidKind(memory.locationKind) then
         memory.locationKind = "BUILDING"
     end
+    -- locationKind is retained as legacy data, never used for presentation.
+    SurvivorMemory.LocationName.initialize(memory, rebuildLabels)
+    LootRespawnMemory.initializeBuilding(memory)
+    SurvivorMemory.ItemMemory.initialize(memory)
     return memory
 end
 
@@ -65,6 +73,7 @@ function MemoryStore.migrate(raw)
     if type(raw) ~= "table" then raw = {} end
     raw = raw or {}
     local version = tonumber(raw.schemaVersion) or 0
+    local rebuildLabels = version < 10
     if version == 0 then
         raw.buildings = raw.buildings or {}
         raw.debug = raw.debug or {}
@@ -93,6 +102,22 @@ function MemoryStore.migrate(raw)
         raw.schemaVersion = 6
         version = 6
     end
+    if version == 6 then
+        raw.schemaVersion = 7
+        version = 7
+    end
+    if version == 7 then
+        raw.schemaVersion = 8
+        version = 8
+    end
+    if version == 8 then
+        raw.schemaVersion = 9
+        version = 9
+    end
+    if version == 9 then
+        raw.schemaVersion = 10
+        version = 10
+    end
     if version ~= MemoryStore.SCHEMA_VERSION then
         error("Unsupported Survivor Memory schema: " .. tostring(version))
     end
@@ -105,8 +130,15 @@ function MemoryStore.migrate(raw)
     if type(raw.debug) ~= "table" then raw.debug = {} end
     if type(raw.importantMemories) ~= "table" then raw.importantMemories = {} end
     if type(raw.vehicleMemories) ~= "table" then raw.vehicleMemories = {} end
+    if type(raw.buildingAliases) ~= "table" then raw.buildingAliases = {} end
+    if type(raw.linkedBuildingHistory) ~= "table" then raw.linkedBuildingHistory = {} end
+    for key, target in pairs(raw.buildingAliases) do
+        if type(key) ~= "string" or type(target) ~= "string" or key == target then
+            raw.buildingAliases[key] = nil
+        end
+    end
     for key, memory in pairs(raw.buildings) do
-        local sanitized = sanitizeBuilding(key, memory)
+        local sanitized = sanitizeBuilding(key, memory, rebuildLabels)
         if sanitized then
             raw.buildings[key] = sanitized
             MemoryStore.recomputeStatus(sanitized)
@@ -147,13 +179,16 @@ function MemoryStore.newBuilding(identity, observedAt)
         roomsKnown = {},
         containersKnown = {},
         containersInspected = {},
+        itemMemories = {},
         status = MemoryStore.Status.VISITED,
         centerX = identity.centerX,
         centerY = identity.centerY,
         identityVersion = 1,
         nativeIdObserved = identity.nativeId,
         locationKind = "BUILDING",
+        locationKinds = {},
         placeDesignation = PlaceDesignation.NONE,
+        lootRespawnArmed = {},
     }
 end
 
@@ -198,7 +233,9 @@ end
 function MemoryStore.observeContainer(memory, containerKey, observedAt)
     if not containerKey or memory.containersKnown[containerKey] ~= nil then return false end
     memory.containersKnown[containerKey] = observedAt
+    local oldStatus = memory.status
     MemoryStore.recomputeStatus(memory)
+    LootRespawnMemory.recordStatus(memory, oldStatus, observedAt)
     return true
 end
 
@@ -207,8 +244,21 @@ function MemoryStore.inspectContainer(memory, containerKey, observedAt)
     MemoryStore.observeContainer(memory, containerKey, observedAt)
     local firstInspection = memory.containersInspected[containerKey] == nil
     memory.containersInspected[containerKey] = observedAt
+    local oldStatus = memory.status
     MemoryStore.recomputeStatus(memory)
+    LootRespawnMemory.recordStatus(memory, oldStatus, observedAt)
     return firstInspection
+end
+
+function MemoryStore.markContainerLooted(memory, containerKey, observedAt, eligible)
+    return LootRespawnMemory.markLooted(memory, containerKey, observedAt, eligible)
+end
+
+function MemoryStore.confirmLootRespawn(memory, containerKey, observedAt)
+    if not LootRespawnMemory.confirm(memory, containerKey, observedAt) then return false end
+    MemoryStore.recomputeStatus(memory)
+    memory.searchCompletedAt = memory.status == MemoryStore.Status.SEARCHED and observedAt or nil
+    return true
 end
 
 function MemoryStore.stats(root, memory)

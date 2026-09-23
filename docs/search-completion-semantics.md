@@ -41,3 +41,17 @@ Le smoke B42 réel confirme cette règle: après deux inspections, d'autres
 containers présentés par l'UI de loot restaient connus et le statut est resté
 `PARTIALLY_SEARCHED`. La règle n'a pas été assouplie pour produire un joli
 `SEARCHED`.
+
+## Respawn vanilla du loot
+
+Lorsque l'option dédiée est active, un bâtiment `SEARCHED` peut signaler que du
+butin **a peut-être** réapparu après les délais vanilla. Cette indication ne
+change pas le statut et ne prétend pas qu'un respawn a réellement eu lieu.
+
+Un respawn n'est confirmé que lorsqu'un conteneur naturel précédemment pillé
+réapparaît dans l'interface de loot et que son drapeau serveur vanilla
+`hasBeenLooted` est passé de vrai à faux. B42 n'effectue cette transition que
+lorsqu'il a effectivement ajouté des objets. Cette observation invalide
+l'ancienne passe de fouille du bâtiment : le conteneur visible reste inspecté,
+les autres conteneurs connus doivent être revisités. Aucun contenu d'inventaire
+n'est mémorisé et aucun conteneur invisible n'est interrogé.

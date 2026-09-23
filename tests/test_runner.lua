@@ -19,6 +19,7 @@ local VehicleMemory = require "SurvivorMemory/VehicleMemory"
 local VisibleObservation = require "SurvivorMemory/VisibleObservation"
 local Settings = require "SurvivorMemory/Settings"
 local BuildingMarkerSelection = require "SurvivorMemory/BuildingMarkerSelection"
+local LootRespawnMemory = require "SurvivorMemory/LootRespawnMemory"
 function getText(key, value)
     if value == nil then return key end
     return key .. ":" .. tostring(value)
@@ -56,7 +57,7 @@ truthy(identity.key ~= BuildingIdentity.fromFields(nextHouse).key, "different bu
 equal(BuildingIdentity.fromFields(deepCopy(house)).key, identity.key, "building identity serialization")
 
 local rootData = MemoryStore.migrate(nil)
-equal(rootData.schemaVersion, 6, "new schema version")
+equal(rootData.schemaVersion, 10, "new schema version")
 local memory = MemoryStore.enterBuilding(rootData, identity, 24)
 equal(memory.firstVisited, 24, "first visit")
 equal(memory.lastVisited, 24, "first lastVisited")
@@ -115,10 +116,77 @@ local otherMemory = MemoryStore.enterBuilding(rootData, BuildingIdentity.fromFie
 equal(MemoryStore.stats(rootData, otherMemory).containersInspected, 0, "container association stays in building")
 equal(MemoryStore.stats(rootData, memory).containersInspected, 2, "source building retains inspections")
 
+local lootRoot = MemoryStore.migrate(nil)
+local lootMemory = MemoryStore.enterBuilding(lootRoot, identity, 1)
+MemoryStore.observeContainer(lootMemory, containerA, 2)
+MemoryStore.observeContainer(lootMemory, containerB, 2)
+MemoryStore.inspectContainer(lootMemory, containerA, 3)
+MemoryStore.inspectContainer(lootMemory, containerB, 4)
+equal(lootMemory.status, "SEARCHED", "loot fixture starts fully searched")
+equal(lootMemory.searchCompletedAt, 4, "search completion time is recorded")
+equal(MemoryStore.markContainerLooted(lootMemory, "unknown", 5, true), false,
+    "unobserved container cannot arm loot respawn tracking")
+equal(MemoryStore.markContainerLooted(lootMemory, containerA, 5, false), false,
+    "container outside vanilla respawn zones is not armed")
+truthy(MemoryStore.markContainerLooted(lootMemory, containerA, 5, true),
+    "looted eligible container is armed")
+equal(MemoryStore.markContainerLooted(lootMemory, containerA, 6, true), false,
+    "repeat loot does not duplicate armed container")
+equal(lootMemory.lootRespawnArmed[containerA], 5,
+    "subsequent looting does not restart the vanilla respawn cycle")
+equal(LootRespawnMemory.mayHaveReappeared(lootMemory, 28, 24, 0), false,
+    "warning waits for the vanilla respawn interval")
+equal(LootRespawnMemory.mayHaveReappeared(lootMemory, 29, 24, 0), true,
+    "warning appears after the vanilla respawn interval")
+equal(LootRespawnMemory.mayHaveReappeared(lootMemory, 40, 24, 48), false,
+    "zone unseen interval delays the possible warning")
+lootMemory.lastVisited = 20
+equal(LootRespawnMemory.mayHaveReappeared(lootMemory, 60, 24, 48), false,
+    "recent personal visit prevents a false zone warning")
+lootMemory.lastVisited = 1
+truthy(MemoryStore.confirmLootRespawn(lootMemory, containerA, 60),
+    "confirmed vanilla flag transition refreshes progress")
+equal(lootMemory.status, "PARTIALLY_SEARCHED",
+    "confirmed respawn invalidates other known containers")
+equal(lootMemory.containersInspected[containerA], 60,
+    "container proving respawn remains inspected")
+equal(lootMemory.containersInspected[containerB], nil,
+    "other known container must be revisited")
+equal(LootRespawnMemory.isArmed(lootMemory, containerA), false,
+    "confirmed container is disarmed until looted again")
+MemoryStore.inspectContainer(lootMemory, containerB, 61)
+equal(lootMemory.status, "SEARCHED", "reinspection completes refreshed search")
+equal(lootMemory.searchCompletedAt, 61, "refreshed completion gets deterministic timestamp")
+local singleLootRoot = MemoryStore.migrate(nil)
+local singleLootMemory = MemoryStore.enterBuilding(singleLootRoot, identity, 1)
+MemoryStore.inspectContainer(singleLootMemory, containerA, 2)
+MemoryStore.markContainerLooted(singleLootMemory, containerA, 3, true)
+MemoryStore.confirmLootRespawn(singleLootMemory, containerA, 30)
+equal(singleLootMemory.status, "SEARCHED",
+    "visible sole container remains searched after confirmed respawn")
+equal(singleLootMemory.searchCompletedAt, 30,
+    "sole-container confirmation starts a fresh completion interval")
+equal(LootRespawnMemory.isEligibleZoneType("TownZone"), true,
+    "town zone is vanilla loot-respawn eligible")
+equal(LootRespawnMemory.isEligibleZoneType("Forest"), false,
+    "non-town zone is not loot-respawn eligible")
+
+local migratedLoot = MemoryStore.migrate({
+    schemaVersion = 6,
+    buildings = { old = { firstVisited = 1, lastVisited = 2,
+        containersKnown = { a = 1 }, containersInspected = { a = 2 }, status = "SEARCHED" } },
+    importantMemories = {}, vehicleMemories = {}, debug = {},
+})
+equal(migratedLoot.schemaVersion, 10, "v6 store migrates to v10")
+equal(migratedLoot.buildings.old.searchCompletedAt, 2,
+    "v6 searched building derives its completion timestamp")
+equal(type(migratedLoot.buildings.old.lootRespawnArmed), "table",
+    "v6 building gains empty respawn tracking")
+
 local modData = {}
 local attached = MemoryStore.forModData(modData)
 truthy(attached == modData.SurvivorMemory, "player modData attachment")
-equal(attached.schemaVersion, 6, "player modData migration")
+equal(attached.schemaVersion, 10, "player modData migration")
 
 equal(TimeFormat.age(100, 99), "IGUI_SM_Today", "human time today")
 equal(TimeFormat.age(100, 75), "IGUI_SM_Yesterday", "human time yesterday")
@@ -131,7 +199,7 @@ equal(accepted, false, "unknown persistence version rejected")
 
 local recoveredModData = { SurvivorMemory = { schemaVersion = 999, buildings = {} } }
 local recovered = MemoryStore.forModData(recoveredModData)
-equal(recovered.schemaVersion, 6, "future schema degrades to fresh store")
+equal(recovered.schemaVersion, 10, "future schema degrades to fresh store")
 equal(recoveredModData.SurvivorMemoryRecovery.schemaVersion, 999, "future schema recovery marker")
 
 local partial = MemoryStore.migrate({
@@ -146,7 +214,7 @@ equal(partial.buildings.valid.firstVisited, 12, "partial first timestamp repaire
 equal(type(partial.buildings.valid.roomsKnown), "table", "partial room set repaired")
 equal(partial.buildings.invalid, nil, "unrecoverable building removed")
 equal(type(partial.debug), "table", "corrupted debug counters repaired")
-equal(partial.schemaVersion, 6, "v1 store migrates to current schema")
+equal(partial.schemaVersion, 10, "v1 store migrates to current schema")
 equal(partial.buildings.valid.placeDesignation, PlaceDesignation.NONE, "v1 building migrates to no designation")
 
 local corruptDesignation = MemoryStore.migrate({
@@ -200,7 +268,7 @@ local migratedEmotion = MemoryStore.migrate({
     buildings = { emotional = { firstVisited = 1, lastVisited = 2,
         emotionalMemory = { observedAt = 1, safeReturns = 1 } } },
 })
-equal(migratedEmotion.schemaVersion, 6, "v2 store migrates through to v6")
+equal(migratedEmotion.schemaVersion, 10, "v2 store migrates to v10")
 equal(migratedEmotion.buildings.emotional.emotionalMemory.safeReturns, 1,
     "valid emotional memory survives migration")
 local corruptEmotion = MemoryStore.migrate({
@@ -242,7 +310,7 @@ local importantReload = MemoryStore.migrate(deepCopy(rootData))
 equal(#ImportantMemory.forBuilding(importantReload, identity.key), 1,
     "important memory survives serialization")
 local migratedImportant = MemoryStore.migrate({ schemaVersion = 3, buildings = {}, debug = {} })
-equal(migratedImportant.schemaVersion, 6, "v3 store migrates through to v6")
+equal(migratedImportant.schemaVersion, 10, "v3 store migrates to v10")
 equal(type(migratedImportant.importantMemories), "table", "v4 migration creates important memory collection")
 local corruptImportant = MemoryStore.migrate({
     schemaVersion = 4, buildings = {}, debug = {},
@@ -290,6 +358,12 @@ equal(Settings.enabled(disabledMod, "worldMap"), false, "master switch disables 
 local noBuildings = { buildingMemoryEnabled = false }
 equal(Settings.enabled(noBuildings, "rooms"), false, "rooms depend on building memory")
 equal(Settings.enabled(noBuildings, "containers"), false, "containers depend on building memory")
+equal(Settings.enabled(noBuildings, "lootRespawnAwareness"), false,
+    "loot respawn awareness depends on building memory")
+equal(Settings.enabled({ rememberContainers = false }, "lootRespawnAwareness"), false,
+    "loot respawn awareness depends on container memory")
+equal(Settings.enabled(nil, "lootRespawnAwareness"), true,
+    "loot respawn awareness defaults to enabled")
 equal(Settings.enabled(noBuildings, "places"), false, "places depend on building memory")
 equal(Settings.enabled(noBuildings, "emotionalMemory"), false, "emotional memory depends on buildings")
 equal(Settings.enabled(noBuildings, "importantMemory"), true, "important memory remains independent")
@@ -421,13 +495,13 @@ equal(sanitizedVehicleDetail.vehicleCondition, nil,
 equal(sanitizedVehicleDetail.personal, false,
     "malformed personal vehicle designation degrades safely")
 local migratedVehicles = MemoryStore.migrate({ schemaVersion = 4, buildings = {}, debug = {} })
-equal(migratedVehicles.schemaVersion, 6, "v4 store migrates through to v6")
+equal(migratedVehicles.schemaVersion, 10, "v4 store migrates to v10")
 equal(type(migratedVehicles.vehicleMemories), "table", "vehicle migration creates collection")
 local migratedPersonalVehicles = MemoryStore.migrate({
     schemaVersion = 5, buildings = {}, debug = {}, importantMemories = {},
     vehicleMemories = {},
 })
-equal(migratedPersonalVehicles.schemaVersion, 6, "v5 store migrates to v6")
+equal(migratedPersonalVehicles.schemaVersion, 10, "v5 store migrates to v10")
 local corruptVehicles = MemoryStore.migrate({
     schemaVersion = 6, buildings = {}, debug = {}, importantMemories = {},
     vehicleMemories = { bad = { sqlId = "x", observedAt = 1, x = 1, y = 1, z = 0 } },
@@ -488,18 +562,21 @@ truthy(MemoryStore.estimateSerializedBytes(rootData) > 0, "serialized size estim
 equal(LocationName.kindFromRoomName("bedroom"), "HOUSE", "bedroom identifies house")
 equal(LocationName.kindFromRoomName("policestorage"), "POLICE", "police room identifies station")
 equal(LocationName.kindFromRoomName("unknown-room"), nil, "unknown room stays generic")
-equal(LocationName.choose("HOUSE", "POLICE"), "POLICE", "specific observed location upgrades generic")
-equal(LocationName.choose("POLICE", "HOUSE"), "POLICE", "generic room cannot downgrade specific location")
-equal(LocationName.choose("HOUSE", "GARAGE"), "HOUSE", "house is not renamed after garage visit")
+equal(LocationName.kindFromRoomName("kitchen"), nil, "kitchen does not establish residential use")
+equal(LocationName.kindFromRoomName("bathroom"), nil, "bathroom does not establish residential use")
+equal(LocationName.kindFromRoomName("closet"), nil, "closet does not establish residential use")
 equal(StatusPresentation.color("VISITED").r, 0.82, "visited indicator is red")
 equal(StatusPresentation.color("SEARCHED").g, 0.72, "searched indicator is green")
 equal(StatusPresentation.needsRefresh("VISITED", "VISITED"), false, "matching indicator status stays current")
 equal(StatusPresentation.needsRefresh("PARTIALLY_SEARCHED", "SEARCHED"), true, "changed indicator status refreshes")
 
-memory.locationKind = "GROCERY"
+memory.locationKind = "HOUSE" -- Legacy field is deliberately ignored by presentation.
+memory.locationKinds.GROCERY = true
 rootData.revision = 42
 local locationReload = MemoryStore.migrate(deepCopy(rootData))
-equal(locationReload.buildings[identity.key].locationKind, "GROCERY", "location kind persists")
+equal(locationReload.buildings[identity.key].locationKinds.GROCERY, true, "observed location labels persist")
+equal(LocationName.text(locationReload.buildings[identity.key]), "IGUI_SM_Location_GROCERY",
+    "legacy location kind does not override observed label")
 equal(locationReload.revision, 42, "overlay revision persists")
 
 local corruptLocation = MemoryStore.migrate({
@@ -509,4 +586,57 @@ local corruptLocation = MemoryStore.migrate({
 equal(corruptLocation.buildings.badLocation.locationKind, "BUILDING", "invalid location kind degrades safely")
 equal(corruptLocation.revision, 0, "invalid overlay revision repaired")
 
+local ItemMemory = require "SurvivorMemory/ItemMemory"
+local itemRoot = MemoryStore.migrate({ schemaVersion = 7, buildings = {
+    [identity.key] = { firstVisited = 1, lastVisited = 2, visitCount = 3 },
+} })
+local itemBuilding = itemRoot.buildings[identity.key]
+equal(itemRoot.schemaVersion, 10, "item migration v7 to v10")
+equal(#ItemMemory.all(itemBuilding), 0, "old saves start without invented item memories")
+equal(itemBuilding.visitCount, 3, "item migration preserves visits")
+local itemObservation = {
+    itemType = "Base.NailsBox", displayName = "Boîte de clous — 钉子 / Гвозди",
+    containerKey = containerA, quantityObserved = 2, observedAt = 48,
+    textureName = "Item_NailsBox",
+}
+truthy(ItemMemory.remember(itemBuilding, itemObservation), "remember explicit item selection")
+local itemKey = ItemMemory.key(containerA, "Base.NailsBox")
+equal(itemBuilding.itemMemories[itemKey].quantityObserved, 2, "observed selected count retained")
+equal(itemBuilding.status, "VISITED", "remembering item does not mark building searched")
+itemObservation.quantityObserved = 1
+itemObservation.observedAt = 50
+ItemMemory.remember(itemBuilding, itemObservation)
+equal(#ItemMemory.all(itemBuilding), 1, "repeat selection updates rather than duplicates")
+equal(itemBuilding.itemMemories[itemKey].quantityObserved, 1, "repeat observation replaces quantity")
+equal(itemBuilding.itemMemories[itemKey].observedAt, 50, "repeat selection updates observation time")
+itemObservation.containerKey = containerB
+ItemMemory.remember(itemBuilding, itemObservation)
+equal(#ItemMemory.all(itemBuilding), 2, "same type in different container preserves both observations")
+local itemReload = MemoryStore.migrate(deepCopy(itemRoot)).buildings[identity.key]
+equal(#ItemMemory.all(itemReload), 2, "selected item memories survive serialization")
+equal(itemReload.itemMemories[itemKey].textureName, "Item_NailsBox", "observed icon survives reload")
+equal(itemReload.itemMemories[itemKey].displayName, itemObservation.displayName, "Unicode item name survives reload")
+equal(#ItemMemory.all(MemoryStore.newBuilding(identity, 0)), 0, "new character does not inherit item memories")
+equal(ItemMemory.remember(itemReload, { itemType = "Base.NailsBox" }), false, "partial observation rejected")
+local corruptItem = deepCopy(itemObservation)
+corruptItem.quantityObserved = 0 / 0
+equal(ItemMemory.remember(itemReload, corruptItem), false, "NaN quantity rejected")
+corruptItem.quantityObserved = 1
+corruptItem.observedAt = math.huge
+equal(ItemMemory.remember(itemReload, corruptItem), false, "infinite date rejected")
+itemReload.itemMemories.bad = { itemType = "Base.NailsBox" }
+ItemMemory.initialize(itemReload)
+equal(itemReload.itemMemories.bad, nil, "corrupted persisted item entry removed")
+equal(#ItemMemory.all(itemReload), 2, "valid siblings preserved during sanitation")
+truthy(ItemMemory.forget(itemReload, itemKey), "explicit forgetting removes selected observation")
+equal(#ItemMemory.all(itemReload), 1, "forgetting one container preserves the other")
+equal(#ItemMemory.all(itemBuilding), 2, "another character store remains untouched")
+equal(Settings.enabled({ itemMemoryEnabled = false }, "itemMemory"), false, "item memory option disables feature")
+equal(Settings.enabled({ buildingMemoryEnabled = false }, "itemMemory"), false, "item memory depends on building memory")
+equal(Settings.enabled({ rememberContainers = false }, "itemMemory"), true, "manual item memories do not require automatic container tracking")
+
+assert(loadfile(root .. "/tests/item_memory_runtime.lua"))()(root, equal, truthy)
+assert(loadfile(root .. "/tests/map_building_links.lua"))()(root, equal, truthy)
+assert(loadfile(root .. "/tests/map_tooltip.lua"))()(root, equal, truthy)
+assert(loadfile(root .. "/tests/location_names.lua"))()(root, equal, truthy)
 print(string.format("PASS: %d deterministic Survivor Memory assertions", passed))

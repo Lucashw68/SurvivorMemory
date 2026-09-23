@@ -10,6 +10,13 @@ Visited buildings can also be marked manually as a personal Home or Outpost.
 These designations remain independent from exploration progress and use their
 own non-persistent World Map overlay markers.
 
+Distant ordinary markers can fade to keep the map readable. Personal places
+and vehicles stay prominent, and hovering restores full visibility. The focus
+radius is adjustable in the native options. Personal vehicles keep the car
+icon with a small gold badge; the local player's red dot stays above markers.
+Basements can join the surface building's memory when your character crosses
+an observed connecting staircase, without discovering any unvisited rooms.
+
 Exceptionally severe experiences can make a place hard to forget. Emotional
 Memory requires sustained panic, real zombie danger, and serious vulnerability;
 returning later may cause one small vanilla panic/stress reaction. It adds no
@@ -21,6 +28,13 @@ generators, gas pumps, and antique ovens / wood stoves. The wording is always
 remain deferred until Build 42 exposes an identity that cannot be confused with
 other unlimited water sources. A remarkable object is remembered automatically
 when it becomes genuinely visible; no context-menu action is required.
+
+You can also choose individual loot items worth remembering. Right-click an
+item (or a selection) in a nearby building container and choose **Remember
+selected items here**. Its observed quantity, name, icon and date appear in the
+building's World Map tooltip. Right-click that marker to forget an item memory.
+These are last-seen observations: selecting an item again refreshes the memory;
+moving it later does not silently update it. The feature has its own native option.
 
 Vehicle Memory remembers where the character last meaningfully encountered a
 vehicle: when entering it, inspecting its mechanics, or leaving it. The World
@@ -45,7 +59,9 @@ be enabled independently: Building Memory, Places That Matter, Emotional
 Memory, Things Worth Remembering, Vehicle Memory, the status indicator, and
 the World Map overlay. Map categories, marker size, emotional reaction
 strength, memorable object types, the recall key, and NeatUI preference can
-also be configured.
+also be configured. Optional vanilla loot-respawn awareness warns when a
+searched memory may be outdated, then refreshes search progress only after the
+survivor actually encounters a container that the game confirms was restocked.
 
 Options are personal to the local Project Zomboid profile. Disabling a module
 never deletes existing character memories; it only stops new observations and

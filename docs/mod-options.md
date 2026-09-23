@@ -26,7 +26,18 @@ pas imposer les préférences d'un hôte à tous les souvenirs personnels.
   présentation dédiée, sans supprimer les données déjà persistées ;
 - réactiver une fonctionnalité reprend le tracking normal ;
 - les options d'overlay ne modifient que le rendu de la carte ;
+- `Fade distant markers` atténue les marqueurs ordinaires de 100 % à 25 %
+  entre une et deux fois le rayon ; lieux/véhicules personnels gardent au moins
+  85 %. Le survol rétablit l'opacité ;
+- `Map focus radius (tiles)` vaut 300 par défaut, réglable de 50 à 2 000 par
+  pas de 50. L'option est grisée si l'atténuation ou la carte est désactivée ;
+- `Detect vanilla loot respawn` dépend de Building Memory et de la mémoire des
+  contenants. Il conserve seulement l'éligibilité des contenants réellement
+  pillés, jamais leur contenu ;
 - `Places That Matter` et `Emotional Memory` dépendent de Building Memory ;
+- `Remember selected items` dépend également de Building Memory : l'action
+  manuelle et les souvenirs dans les tooltips sont masqués quand elle est
+  désactivée, sans effacer les observations déjà enregistrées ;
 - `Things Worth Remembering` et `Vehicle Memory` restent indépendants ;
 - le changement de backend NeatUI/vanilla nécessite un redémarrage car les
   classes de fenêtre sont choisies au chargement des Lua client.

@@ -11,6 +11,8 @@ require "SurvivorMemory/ImportantMemory"
 require "SurvivorMemory/VehicleMemory"
 require "SurvivorMemory/BuildingMarkerSelection"
 require "SurvivorMemory/ModOptions"
+require "SurvivorMemory/MapPresentation"
+require "SurvivorMemory/MapTooltip"
 
 SurvivorMemory = SurvivorMemory or {}
 SurvivorMemory.WorldMapOverlay = SurvivorMemory.WorldMapOverlay or {}
@@ -27,6 +29,9 @@ local ImportantMemory = SurvivorMemory.ImportantMemory
 local VehicleMemory = SurvivorMemory.VehicleMemory
 local BuildingMarkerSelection = SurvivorMemory.BuildingMarkerSelection
 local ModOptions = SurvivorMemory.ModOptions
+local ItemMemory = SurvivorMemory.ItemMemory
+local Presentation = SurvivorMemory.MapPresentation
+local MapTooltip = SurvivorMemory.MapTooltip
 
 local ICON_PATHS = {
     NONE = "media/ui/SurvivorMemory/map-memory-marker.png",
@@ -79,16 +84,31 @@ local function displayMarkerSizeFor(memory, baseSize)
     return baseSize
 end
 
+local function personalBuilding(memory)
+    return ModOptions.enabled("places") and ModOptions.enabled("personalPlaceMarkers")
+        and PlaceDesignation.isPersonalPlace(memory.placeDesignation)
+end
+
+local function markerOpacity(map, x, y, personal, hovered)
+    return Presentation.opacity(x, y, map.character:getX(), map.character:getY(),
+        ModOptions.value("markerFocusRadius"), ModOptions.enabled("fadeDistantMarkers"), personal, hovered)
+end
+
 local function markersFor(map, root)
     local revision = tonumber(root.revision) or 0
     local cache = map.smMemoryMarkerCache
     if cache and cache.root == root and cache.revision == revision then return cache.markers end
     local markers = BuildingMarkerSelection.select(root.buildings)
+    local importantBuildings = {}
+    for _, observation in pairs(root.importantMemories or {}) do
+        if observation.buildingKey then importantBuildings[observation.buildingKey] = true end
+    end
     map.smMemoryMarkerCache = {
         root = root,
         revision = revision,
         markers = markers,
         important = ImportantMemory.outdoor(root),
+        importantBuildings = importantBuildings,
         vehicles = VehicleMemory.all(root),
     }
     return markers
@@ -104,6 +124,28 @@ local function importantMarkersFor(map, root)
     return map.smMemoryMarkerCache.important or {}
 end
 
+-- Presence of remembered observations, never a claim about current loot.
+-- The resource index shares the revision cache; item presence is an O(1) lookup.
+function Overlay.hasObjectBadge(map, memory)
+    if ModOptions.enabled("itemMemory") and type(memory.itemMemories) == "table" then
+        -- B42/Kahlua exposes pairs, but not the standard Lua next global.
+        for _ in pairs(memory.itemMemories) do return true end
+    end
+    local cache = map.smMemoryMarkerCache
+    return ModOptions.enabled("importantMemory") and cache ~= nil
+        and cache.importantBuildings ~= nil and cache.importantBuildings[memory.buildingKey] == true
+end
+
+function Overlay.drawObjectBadge(map, left, top, markerSize, alpha)
+    local size = math.max(7, math.min(11, math.floor(markerSize * 0.40 + 0.5)))
+    local x, y = left + markerSize - size + 1, top + markerSize - size + 1
+    map:drawRect(x, y, size, size, alpha, 0.06, 0.08, 0.12)
+    map:drawRect(x + 1, y + 1, size - 2, size - 2, alpha, 0.18, 0.48, 0.70)
+    local center = math.floor(size / 2)
+    map:drawRect(x + 2, y + center, size - 4, 1, alpha, 1, 1, 1)
+    map:drawRect(x + center, y + 2, 1, size - 4, alpha, 1, 1, 1)
+end
+
 function Overlay.memoryAt(map, mouseX, mouseY)
     if not ModOptions.enabled("worldMap") or map.smMemoryOverlayEnabled == false
             or not map.character or not map.mapAPI then return nil end
@@ -117,7 +159,10 @@ function Overlay.memoryAt(map, mouseX, mouseY)
             local radius = displayMarkerSizeFor(memory, baseSize) / 2 + 3
             local dx, dy = mouseX - x, mouseY - y
             local distance = dx * dx + dy * dy
-            if distance <= radius * radius and (not closestDistance or distance < closestDistance) then
+            local personal = personalBuilding(memory)
+            if distance <= radius * radius and (not closest
+                    or (personal and not personalBuilding(closest))
+                    or (personal == personalBuilding(closest) and distance < closestDistance)) then
                 closest, closestDistance = memory, distance
             end
         end
@@ -129,15 +174,18 @@ function Overlay.vehicleAt(map, mouseX, mouseY)
     if not ModOptions.enabled("vehicleMarkers") or map.smMemoryOverlayEnabled == false
             or not map.character or not map.mapAPI then return nil end
     local root = MemoryStore.forModData(map.character:getModData())
-    local size = math.max(18, math.floor(baseMarkerSize(map) * 1.05))
     local closest, closestDistance
     for _, observation in ipairs(vehicleMarkersFor(map, root)) do
+        local size = Presentation.vehicleSize(baseMarkerSize(map), observation.personal)
         local x = map.mapAPI:worldToUIX(observation.x, observation.y)
         local y = map.mapAPI:worldToUIY(observation.x, observation.y)
         local dx, dy = mouseX - x, mouseY - y
         local distance = dx * dx + dy * dy
         local radius = size / 2 + 3
-        if distance <= radius * radius and (not closestDistance or distance < closestDistance) then
+        local personal = observation.personal == true
+        if distance <= radius * radius and (not closest
+                or (personal and closest.personal ~= true)
+                or (personal == (closest.personal == true) and distance < closestDistance)) then
             closest, closestDistance = observation, distance
         end
     end
@@ -145,8 +193,7 @@ function Overlay.vehicleAt(map, mouseX, mouseY)
 end
 
 function Overlay.showPlaceContextMenu(map, memory, x, y)
-    if not ModOptions.enabled("placeDesignations")
-            or not map or not memory or not map.character then return false end
+    if not map or not memory or not map.character then return false end
     local playerNum = map.character:getPlayerNum()
     local context = ISContextMenu.get(playerNum, x + map:getAbsoluteX(), y + map:getAbsoluteY())
     local current = PlaceDesignation.normalize(memory.placeDesignation)
@@ -155,10 +202,21 @@ function Overlay.showPlaceContextMenu(map, memory, x, y)
         { PlaceDesignation.OUTPOST, "IGUI_SM_MapMarkOutpost" },
         { PlaceDesignation.NONE, "IGUI_SM_MapClearPlace" },
     }
-    for _, choice in ipairs(choices) do
+    for _, choice in ipairs(ModOptions.enabled("placeDesignations") and choices or {}) do
         local option = context:addOption(getText(choice[2]), playerNum,
             Runtime.setPlaceDesignation, memory.buildingKey, choice[1])
         context:setOptionChecked(option, current == choice[1])
+    end
+    if ModOptions.enabled("itemMemory") and #ItemMemory.all(memory) > 0 then
+        local option = context:addOption(getText("IGUI_SM_ForgetItemMenu"), nil, nil)
+        local subMenu = ISContextMenu:getNew(context)
+        context:addSubMenu(option, subMenu)
+        for _, entry in ipairs(ItemMemory.all(memory)) do
+            local observation = entry.observation
+            subMenu:addOption(getText("IGUI_SM_ItemLastSeen", observation.displayName,
+                observation.quantityObserved, TimeFormat.age(TimeFormat.worldAgeHours(), observation.observedAt)),
+                playerNum, Runtime.forgetItem, memory.buildingKey, entry.key)
+        end
     end
     return true
 end
@@ -174,107 +232,108 @@ function Overlay.showVehicleContextMenu(map, observation, x, y)
     return true
 end
 
-local function drawTooltip(map, memory, x, y)
-    local statusIndex = 2
-    local lines = {
-        LocationName.text(memory),
-        StatusPresentation.text(memory.status),
-        getText("IGUI_SM_MapLastVisited", TimeFormat.age(TimeFormat.worldAgeHours(), memory.lastVisited)),
-    }
+function Overlay.drawBuildingTooltip(map, memory, x, y)
+    local rows = { { text = LocationName.text(memory), title = true } }
     if ModOptions.enabled("places") and PlaceDesignation.isPersonalPlace(memory.placeDesignation) then
-        table.insert(lines, 2, getText("IGUI_SM_PlaceDesignation",
-            getText("IGUI_SM_Place_" .. PlaceDesignation.normalize(memory.placeDesignation))))
-        statusIndex = 3
+        rows[#rows + 1] = { text = getText("IGUI_SM_Place_" .. PlaceDesignation.normalize(memory.placeDesignation)),
+            color = MapTooltip.ACCENT }
+    end
+    rows[#rows + 1] = { text = StatusPresentation.text(memory.status),
+        color = StatusPresentation.color(memory.status), divider = true }
+    rows[#rows + 1] = { text = getText("IGUI_SM_MapLastVisited",
+        TimeFormat.age(TimeFormat.worldAgeHours(), memory.lastVisited)), color = MapTooltip.MUTED }
+    if Runtime.mayHaveLootRespawned(memory) then
+        rows[#rows + 1] = { text = getText("IGUI_SM_LootRespawnPossible"), color = MapTooltip.ACCENT }
     end
     if ModOptions.enabled("emotionalMemory") and memory.emotionalMemory then
-        table.insert(lines, getText("IGUI_SM_EmotionalMemory"))
+        rows[#rows + 1] = { text = getText("IGUI_SM_EmotionalMemory"), color = MapTooltip.MUTED }
     end
     local root = MemoryStore.forModData(map.character:getModData())
+    local firstObservation = true
     if ModOptions.enabled("importantMemory") then
         for _, observation in ipairs(ImportantMemory.forBuilding(root, memory.buildingKey)) do
-            table.insert(lines, getText("IGUI_SM_ImportantLastSeen",
-                getText("IGUI_SM_Important_" .. observation.kind),
-                TimeFormat.age(TimeFormat.worldAgeHours(), observation.observedAt)))
+            rows[#rows + 1] = { text = getText("IGUI_SM_Important_" .. observation.kind),
+                icon = MapTooltip.importantIcon(observation.kind), divider = firstObservation,
+                detail = getText("IGUI_SM_ImportantMapLastSeen",
+                    TimeFormat.age(TimeFormat.worldAgeHours(), observation.observedAt)) }
+            firstObservation = false
         end
     end
-    local font = UIFont.Small
-    local fontHeight = getTextManager():getFontHeight(font)
-    local width = 0
-    for _, line in ipairs(lines) do
-        width = math.max(width, getTextManager():MeasureStringX(font, line))
+    if ModOptions.enabled("itemMemory") then
+        local items = ItemMemory.all(memory)
+        for index = 1, math.min(#items, 6) do
+            local observation = items[index].observation
+            rows[#rows + 1] = { text = getText("IGUI_SM_ItemQuantity",
+                    observation.displayName, observation.quantityObserved),
+                icon = observation.textureName and getTexture(observation.textureName) or nil,
+                divider = firstObservation,
+                detail = getText("IGUI_SM_VehicleMapLastSeen",
+                    TimeFormat.age(TimeFormat.worldAgeHours(), observation.observedAt)) }
+            firstObservation = false
+        end
+        if #items > 6 then
+            rows[#rows + 1] = { text = getText("IGUI_SM_MoreItemMemories", #items - 6),
+                count = #items - 6, color = MapTooltip.MUTED }
+        end
     end
-    width = width + 16
-    local height = fontHeight * #lines + 14
-    x = math.min(x + 14, map.width - width - 6)
-    y = math.min(y + 14, map.height - height - 6)
-    map:drawRect(x, y, width, height, 0.92, 0.05, 0.05, 0.05)
-    map:drawRectBorder(x, y, width, height, 0.9, 0.55, 0.48, 0.32)
-    local lineY = y + 7
-    for index, line in ipairs(lines) do
-        local color = index == statusIndex and StatusPresentation.color(memory.status)
-            or { r = 0.92, g = 0.92, b = 0.92 }
-        map:drawText(line, x + 8, lineY, color.r, color.g, color.b, 1, font)
-        lineY = lineY + fontHeight
-    end
+    return MapTooltip.draw(map, rows, x, y)
 end
 
-local function drawImportantTooltip(map, observation, x, y)
-    local lines = {
-        getText("IGUI_SM_Important_" .. observation.kind),
-        getText("IGUI_SM_ImportantMapLastSeen",
+function Overlay.drawImportantTooltip(map, observation, x, y)
+    return MapTooltip.draw(map, {
+        { text = getText("IGUI_SM_Important_" .. observation.kind), title = true,
+            icon = MapTooltip.importantIcon(observation.kind) },
+        { text = getText("IGUI_SM_ImportantMapLastSeen",
             TimeFormat.age(TimeFormat.worldAgeHours(), observation.observedAt)),
-    }
-    local font = UIFont.Small
-    local fontHeight = getTextManager():getFontHeight(font)
-    local width = 0
-    for _, line in ipairs(lines) do width = math.max(width, getTextManager():MeasureStringX(font, line)) end
-    width = width + 16
-    local height = fontHeight * #lines + 14
-    x = math.min(x + 14, map.width - width - 6)
-    y = math.min(y + 14, map.height - height - 6)
-    map:drawRect(x, y, width, height, 0.92, 0.05, 0.05, 0.05)
-    map:drawRectBorder(x, y, width, height, 0.9, 0.55, 0.48, 0.32)
-    for index, line in ipairs(lines) do
-        map:drawText(line, x + 8, y + 7 + (index - 1) * fontHeight,
-            0.92, 0.82, 0.62, 1, font)
-    end
+            color = MapTooltip.MUTED, divider = true },
+    }, x, y)
 end
 
-local function drawVehicleMarker(map, x, y, size)
+local function drawVehicleMarker(map, x, y, size, alpha, personal)
     local left, top = math.floor(x - size / 2), math.floor(y - size / 2)
     local texture = getTexture(VEHICLE_ICON_PATH)
-    if texture then map:drawTextureScaled(texture, left, top, size, size, 1, 1, 1, 1) end
+    if texture then map:drawTextureScaled(texture, left, top, size, size, alpha, 1, 1, 1) end
+    if personal then
+        map:drawRect(left + size - 7, top + size - 7, 7, 7, alpha, 0.08, 0.08, 0.08)
+        map:drawRect(left + size - 6, top + size - 6, 5, 5, alpha, 0.95, 0.79, 0.35)
+    end
 end
 
-local function drawVehicleTooltip(map, observation, x, y)
-    local lines = {
-        observation.displayName or getText("IGUI_SM_GenericVehicle"),
-    }
+-- B42 UIWorldMap.renderLocalPlayers is private and runs before the Lua
+-- overlay. Reproduce only its local 6px red dot, with the same visibility rule.
+function Overlay.drawPlayerDots(map)
+    -- UIWorldMapV1.getZoomF delegates to getDisplayZoomF. The renderer itself
+    -- is not exposed to Lua even though its Java method is public.
+    local zoom = map.mapAPI:getZoomF()
+    for playerNum = 0, getNumActivePlayers() - 1 do
+        local player = getSpecificPlayer(playerNum)
+        if player and Presentation.showPlayerDot(map.mapAPI:getBoolean("Players"), zoom, player:isDead()) then
+            local location = player:getVehicle() or player
+            local x = math.floor(map.mapAPI:worldToUIX(location:getX(), location:getY()))
+            local y = math.floor(map.mapAPI:worldToUIY(location:getX(), location:getY()))
+            if x >= 3 and y >= 3 and x <= map.width - 3 and y <= map.height - 3 then
+                map:drawRect(x - 3, y - 3, 6, 6, 1, 1, 0, 0)
+            end
+        end
+    end
+end
+
+function Overlay.drawVehicleTooltip(map, observation, x, y)
+    local rows = { { text = observation.displayName or getText("IGUI_SM_GenericVehicle"), title = true } }
     if observation.personal then
-        table.insert(lines, getText("IGUI_SM_VehiclePersonal"))
+        rows[#rows + 1] = { text = getText("IGUI_SM_VehiclePersonal"), color = MapTooltip.ACCENT }
     end
     if observation.fuelState then
-        table.insert(lines, getText("IGUI_SM_VehicleFuel_" .. observation.fuelState))
+        rows[#rows + 1] = { text = getText("IGUI_SM_VehicleFuel_" .. observation.fuelState), divider = true }
     end
     if observation.vehicleCondition then
-        table.insert(lines, getText("IGUI_SM_VehicleCondition_" .. observation.vehicleCondition))
+        rows[#rows + 1] = { text = getText("IGUI_SM_VehicleCondition_" .. observation.vehicleCondition),
+            divider = not observation.fuelState }
     end
-    table.insert(lines, getText("IGUI_SM_VehicleMapLastSeen",
-        TimeFormat.age(TimeFormat.worldAgeHours(), observation.observedAt)))
-    local font = UIFont.Small
-    local fontHeight = getTextManager():getFontHeight(font)
-    local width = 0
-    for _, line in ipairs(lines) do width = math.max(width, getTextManager():MeasureStringX(font, line)) end
-    width = width + 16
-    local height = fontHeight * #lines + 14
-    x = math.min(x + 14, map.width - width - 6)
-    y = math.min(y + 14, map.height - height - 6)
-    map:drawRect(x, y, width, height, 0.92, 0.05, 0.05, 0.05)
-    map:drawRectBorder(x, y, width, height, 0.9, 0.55, 0.48, 0.32)
-    for index, line in ipairs(lines) do
-        map:drawText(line, x + 8, y + 7 + (index - 1) * fontHeight,
-            0.92, 0.82, 0.62, 1, font)
-    end
+    rows[#rows + 1] = { text = getText("IGUI_SM_VehicleMapLastSeen",
+        TimeFormat.age(TimeFormat.worldAgeHours(), observation.observedAt)),
+        color = MapTooltip.MUTED, divider = true }
+    return MapTooltip.draw(map, rows, x, y)
 end
 
 function Overlay.render(map)
@@ -286,59 +345,76 @@ function Overlay.render(map)
     local size = baseMarkerSize(map)
     local mouseX, mouseY = map:getMouseX(), map:getMouseY()
     local hovered, hoveredX, hoveredY
-    for _, memory in ipairs(markers) do
-        local texture = getTexture(displayIconPathFor(memory))
-        local markerSize = displayMarkerSizeFor(memory, size)
-        local x = map.mapAPI:worldToUIX(memory.centerX, memory.centerY)
-        local y = map.mapAPI:worldToUIY(memory.centerX, memory.centerY)
-        if shouldShowBuilding(memory) and texture and x >= markerSize and y >= markerSize
-                and x <= map.width - markerSize and y <= map.height - markerSize then
-            local left, top = math.floor(x - markerSize / 2), math.floor(y - markerSize / 2)
-            map:drawTextureScaled(texture, left, top, markerSize, markerSize, 1, 1, 1, 1)
-            if math.abs(mouseX - x) <= markerSize / 2 + 3
-                    and math.abs(mouseY - y) <= markerSize / 2 + 3 then
-                hovered, hoveredX, hoveredY = memory, x, y
-            end
-        end
-    end
     local importantHovered, importantX, importantY
-    local importantTexture = getTexture(ICON_PATHS.NONE)
-    local importantSize = math.max(14, math.floor(size * 0.90))
-    for _, observation in ipairs(ModOptions.enabled("importantMarkers")
-            and importantMarkersFor(map, root) or {}) do
-        local x = map.mapAPI:worldToUIX(observation.x, observation.y)
-        local y = map.mapAPI:worldToUIY(observation.x, observation.y)
-        if importantTexture and x >= importantSize and y >= importantSize
-                and x <= map.width - importantSize and y <= map.height - importantSize then
-            map:drawTextureScaled(importantTexture, math.floor(x - importantSize / 2),
-                math.floor(y - importantSize / 2), importantSize, importantSize, 1, 0.92, 0.82, 0.62)
-            if math.abs(mouseX - x) <= importantSize / 2 + 3
-                    and math.abs(mouseY - y) <= importantSize / 2 + 3 then
-                importantHovered, importantX, importantY = observation, x, y
-            end
-        end
-    end
     local vehicleHovered, vehicleX, vehicleY
-    local vehicleSize = math.max(18, math.floor(size * 1.05))
-    for _, observation in ipairs(ModOptions.enabled("vehicleMarkers")
-            and vehicleMarkersFor(map, root) or {}) do
-        local x = map.mapAPI:worldToUIX(observation.x, observation.y)
-        local y = map.mapAPI:worldToUIY(observation.x, observation.y)
-        if x >= vehicleSize and y >= vehicleSize
-                and x <= map.width - vehicleSize and y <= map.height - vehicleSize then
-            drawVehicleMarker(map, x, y, vehicleSize)
-            if math.abs(mouseX - x) <= vehicleSize / 2 + 3
-                    and math.abs(mouseY - y) <= vehicleSize / 2 + 3 then
-                vehicleHovered, vehicleX, vehicleY = observation, x, y
+    local hoverKind
+    for pass = 1, 2 do
+        for _, memory in ipairs(markers) do
+            local texture = getTexture(displayIconPathFor(memory))
+            local markerSize = displayMarkerSizeFor(memory, size)
+            local x = map.mapAPI:worldToUIX(memory.centerX, memory.centerY)
+            local y = map.mapAPI:worldToUIY(memory.centerX, memory.centerY)
+            local personal = personalBuilding(memory)
+            if personal == (pass == 2) and shouldShowBuilding(memory) and texture and x >= markerSize and y >= markerSize
+                    and x <= map.width - markerSize and y <= map.height - markerSize then
+                local left, top = math.floor(x - markerSize / 2), math.floor(y - markerSize / 2)
+                local hit = math.abs(mouseX - x) <= markerSize / 2 + 3
+                    and math.abs(mouseY - y) <= markerSize / 2 + 3
+                local alpha = markerOpacity(map, memory.centerX, memory.centerY, personal, hit)
+                map:drawTextureScaled(texture, left, top, markerSize, markerSize, alpha, 1, 1, 1)
+                if Overlay.hasObjectBadge(map, memory) then
+                    Overlay.drawObjectBadge(map, left, top, markerSize, alpha)
+                end
+                if hit then
+                    hovered, hoveredX, hoveredY = memory, x, y
+                    hoverKind = "building"
+                end
+            end
+        end
+        local importantTexture = getTexture(ICON_PATHS.NONE)
+        local importantSize = math.max(14, math.floor(size * 0.90))
+        for _, observation in ipairs(pass == 1 and ModOptions.enabled("importantMarkers")
+                and importantMarkersFor(map, root) or {}) do
+            local x = map.mapAPI:worldToUIX(observation.x, observation.y)
+            local y = map.mapAPI:worldToUIY(observation.x, observation.y)
+            if importantTexture and x >= importantSize and y >= importantSize
+                    and x <= map.width - importantSize and y <= map.height - importantSize then
+                local hit = math.abs(mouseX - x) <= importantSize / 2 + 3
+                    and math.abs(mouseY - y) <= importantSize / 2 + 3
+                map:drawTextureScaled(importantTexture, math.floor(x - importantSize / 2),
+                    math.floor(y - importantSize / 2), importantSize, importantSize,
+                    markerOpacity(map, observation.x, observation.y, false, hit), 0.92, 0.82, 0.62)
+                if hit then
+                    importantHovered, importantX, importantY = observation, x, y
+                    hoverKind = "important"
+                end
+            end
+        end
+        for _, observation in ipairs(ModOptions.enabled("vehicleMarkers")
+                and vehicleMarkersFor(map, root) or {}) do
+            local vehicleSize = Presentation.vehicleSize(size, observation.personal)
+            local x = map.mapAPI:worldToUIX(observation.x, observation.y)
+            local y = map.mapAPI:worldToUIY(observation.x, observation.y)
+            if (observation.personal == true) == (pass == 2) and x >= vehicleSize and y >= vehicleSize
+                    and x <= map.width - vehicleSize and y <= map.height - vehicleSize then
+                local hit = math.abs(mouseX - x) <= vehicleSize / 2 + 3
+                    and math.abs(mouseY - y) <= vehicleSize / 2 + 3
+                drawVehicleMarker(map, x, y, vehicleSize,
+                    markerOpacity(map, observation.x, observation.y, observation.personal, hit), observation.personal)
+                if hit then
+                    vehicleHovered, vehicleX, vehicleY = observation, x, y
+                    hoverKind = "vehicle"
+                end
             end
         end
     end
-    if vehicleHovered then
-        drawVehicleTooltip(map, vehicleHovered, vehicleX, vehicleY)
-    elseif hovered then
-        drawTooltip(map, hovered, hoveredX, hoveredY)
-    elseif importantHovered then
-        drawImportantTooltip(map, importantHovered, importantX, importantY)
+    Overlay.drawPlayerDots(map)
+    if hoverKind == "vehicle" then
+        Overlay.drawVehicleTooltip(map, vehicleHovered, vehicleX, vehicleY)
+    elseif hoverKind == "building" then
+        Overlay.drawBuildingTooltip(map, hovered, hoveredX, hoveredY)
+    elseif hoverKind == "important" then
+        Overlay.drawImportantTooltip(map, importantHovered, importantX, importantY)
     end
 end
 
@@ -380,7 +456,9 @@ if not Overlay.installed then
     ISWorldMap.onRightMouseUp = function(self, x, y)
         local vehicle = Overlay.vehicleAt(self, x, y)
         local memory = Overlay.memoryAt(self, x, y)
-        if vehicle or (memory and ModOptions.enabled("placeDesignations")) then
+        if memory and personalBuilding(memory) and vehicle and not vehicle.personal then vehicle = nil end
+        if vehicle or (memory and (ModOptions.enabled("placeDesignations")
+                or (ModOptions.enabled("itemMemory") and #ItemMemory.all(memory) > 0))) then
             if self.symbolsUI:onRightMouseUpMap(x, y) then return true end
             if vehicle then return Overlay.showVehicleContextMenu(self, vehicle, x, y) end
             return Overlay.showPlaceContextMenu(self, memory, x, y)
