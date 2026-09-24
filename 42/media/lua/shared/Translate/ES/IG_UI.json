@@ -1,4 +1,7 @@
 {
+    "IGUI_SM_OptionsSectionReading": "Libros y medios recogidos",
+    "IGUI_SM_OptionReadingMemory": "Recordar libros y medios recogidos",
+    "IGUI_SM_OptionReadingMemoryTooltip": "Un marcapáginas azul señala libros, revistas, mapas, CD y VHS que ya llevaste en tu inventario o en una bolsa equipada. El estado de lectura se muestra por separado.",
     "IGUI_SM_ItemQuantity": "%1 × %2",
     "IGUI_SM_MoreTooltipEntries": "… %1 entradas más",
     "IGUI_SM_OptionFadeMarkers": "Atenuar los marcadores lejanos",

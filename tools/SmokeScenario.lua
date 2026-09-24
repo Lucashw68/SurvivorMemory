@@ -169,6 +169,11 @@ local function onTick()
         check(SurvivorMemory.UICompat ~= nil, "ui_compat_loaded")
         check(SurvivorMemory.Runtime.transferHooksInstalled == true,
             "loot_respawn_transfer_hook_installed")
+        check(nativeOptions and nativeOptions:getOption("readingMemoryEnabled") ~= nil,
+            "reading_memory_native_option_registered")
+        check(SurvivorMemory.ReadingMemoryIndicator
+                and SurvivorMemory.ReadingMemoryIndicator.installed == true,
+            "reading_inventory_marker_hook_installed")
         check(SurvivorMemory.UICompat and SurvivorMemory.UICompat.neatAvailable == SM_EXPECT_NEATUI,
             "ui_backend_expected", "neat=" .. tostring(SurvivorMemory.UICompat and SurvivorMemory.UICompat.neatAvailable))
         Runner.fixture = findFixture(player)
@@ -466,6 +471,28 @@ local function onTick()
             "closed_loot_ui_rejects_item_selection")
         loot:setVisible(true)
         context:closeAll()
+        local container = Runner.fixture.containers[1]
+        Runner.collectedBook = container:AddItem("Base.BookCarpentry1")
+        Runner.duplicateBook = container:AddItem("Base.BookCarpentry1")
+        check(Runner.collectedBook and Runner.duplicateBook,
+            "reading_book_pair_created_in_real_loot_container")
+        if Runner.collectedBook then
+            ISTimedActionQueue.add(ISInventoryTransferAction:new(player, Runner.collectedBook,
+                container, player:getInventory(), 1))
+        end
+        Runner.phase, Runner.tick = 34, 0
+    elseif Runner.phase == 34 and (Runner.collectedBook
+            and player:getInventory():contains(Runner.collectedBook)
+            or Runner.tick > 180) then
+        local root = SurvivorMemory.MemoryStore.forModData(player:getModData())
+        check(Runner.collectedBook and player:getInventory():contains(Runner.collectedBook),
+            "reading_book_really_transferred_into_inventory")
+        check(SurvivorMemory.ReadingMemory.has(root, Runner.duplicateBook),
+            "unread_duplicate_in_loot_marked_as_collected")
+        local ok, err = pcall(function()
+            getCore():TakeFullScreenshot("survivor-memory-reading-loot.png")
+        end)
+        check(ok, "reading_loot_screenshot", "error=" .. tostring(err))
         SurvivorMemory.MemoryPanel.open(0); Runner.phase, Runner.tick = 4, 0
     elseif Runner.phase == 4 and Runner.tick > 45 then
         local ok, err = pcall(function() getCore():TakeFullScreenshot("survivor-memory-panel.png") end)

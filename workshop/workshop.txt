@@ -94,6 +94,7 @@ description=[*]Personal Home and Outpost designations.
 description=[*]Rare, fading Emotional Memories from severe experiences.
 description=[*]Last-seen memories for selected important objects and vehicles.
 description=[*]Manually remember selected loot items, with their icons in building map tooltips.
+description=[*]Mark books, magazines, maps, CDs and VHS already collected by your character to spot duplicates while looting.
 description=[*]Broad observed vehicle fuel and condition details, with no live tracking.
 description=[*]Native Build 42 options for every major feature and map category.
 description=[/list]

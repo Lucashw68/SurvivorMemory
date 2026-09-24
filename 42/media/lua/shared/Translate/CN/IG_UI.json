@@ -1,4 +1,7 @@
 {
+    "IGUI_SM_OptionsSectionReading": "拾取过的书籍与媒体",
+    "IGUI_SM_OptionReadingMemory": "记住拾取过的书籍与媒体",
+    "IGUI_SM_OptionReadingMemoryTooltip": "蓝色书签标记曾进入你的物品栏或随身背包的书籍、杂志、地图、CD 和录像带。阅读状态仍单独显示。",
     "IGUI_SM_ItemQuantity": "%1 × %2",
     "IGUI_SM_MoreTooltipEntries": "… 另有 %1 条记录",
     "IGUI_SM_OptionFadeMarkers": "淡化远处标记",

@@ -107,4 +107,7 @@ fi
 if [ "$mode" = building ] && [ -f "$cache_dir/Screenshots/survivor-memory-tooltip-cards.png" ]; then
     cp "$cache_dir/Screenshots/survivor-memory-tooltip-cards.png" "$project_dir/tests/results/screenshots/survivor-memory-tooltip-cards-$variant.png"
 fi
+if [ "$mode" = building ] && [ -f "$cache_dir/Screenshots/survivor-memory-reading-loot.png" ]; then
+    cp "$cache_dir/Screenshots/survivor-memory-reading-loot.png" "$project_dir/tests/results/screenshots/survivor-memory-reading-loot-$variant.png"
+fi
 case "$result" in *'status=PASS'*) exit 0 ;; *) exit 1 ;; esac

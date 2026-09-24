@@ -41,7 +41,11 @@ local function validateReload()
         if not condition then table.insert(failures, name) end
         log("CHECK " .. (condition and "PASS" or "FAIL") .. " name=" .. name)
     end
-    check(root and root.schemaVersion == 10, "schema_v10")
+    check(root and root.schemaVersion == 11, "schema_v11")
+    local carriedBooks = player and player:getInventory():getItemsFromFullType("Base.BookCarpentry1") or nil
+    local carriedBook = carriedBooks and carriedBooks:size() > 0 and carriedBooks:get(0) or nil
+    check(carriedBook and SurvivorMemory.ReadingMemory.has(root, carriedBook),
+        "collected_unread_book_memory_preserved")
     local labelsMatch = memory and type(memory.locationKinds) == "table"
         and root.debug.expectedLocationKinds ~= nil
     for kind in pairs(root and root.debug.expectedLocationKinds or {}) do

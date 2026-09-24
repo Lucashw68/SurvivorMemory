@@ -14,11 +14,12 @@ commandes dédiées) pourra être ajouté si le mod devient compétitif, mais le
 n'accorde aucun avantage à distance. Seuls les souvenirs d'objets explicitement
 sélectionnés sont transmis avec le ModData de leur propriétaire.
 
-## Format v10
+## Format v11
 
 ```lua
 SurvivorMemory = {
-    schemaVersion = 10,
+    schemaVersion = 11,
+    collectedReading = { ["reading1:print:..."] = 315.5 },
     buildingAliases = { [observedBasementKey] = observedSurfaceKey },
     linkedBuildingHistory = { [originalKey] = originalBuildingSnapshot },
     buildings = {
@@ -106,8 +107,13 @@ désignations et identités ne changent pas. Une table v10 manquante est répar�
 depuis ces mêmes pièces mémorisées ; une table valide reste l'ensemble des
 types découverts. Les alias de sous-sol fusionnent aussi cet ensemble.
 Voir [classification des lieux](location-naming-semantics.md).
+La migration v10→v11 ajoute `collectedReading` vide. Elle ne suppose pas que
+les livres déjà déposés dans le monde ont été récupérés. Un inventaire porté
+peut être observé une fois au chargement local, mais aucun conteneur distant
+n'est consulté. Les clés de titre et leur première heure de collecte sont
+personnelles au personnage. Voir [mémoire des lectures](reading-memory.md).
 Une version inconnue est rejetée par `migrate`;
-`forModData` enregistre `SurvivorMemoryRecovery` puis repart sur un store v10
+`forModData` enregistre `SurvivorMemoryRecovery` puis repart sur un store v11
 vide afin de ne pas bloquer le chargement du personnage.
 
 `lootRespawnArmed` ne stocke ni contenu ni quantité. Il indique seulement qu'un

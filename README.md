@@ -36,6 +36,14 @@ building's World Map tooltip. Right-click that marker to forget an item memory.
 These are last-seen observations: selecting an item again refreshes the memory;
 moving it later does not silently update it. The feature has its own native option.
 
+Collected Reading Memory adds a small blue bookmark to books, magazines, maps,
+CDs and VHS tapes that this character has already picked up. A title is
+remembered when it enters the character's inventory or a carried bag; the
+mark can then help spot duplicates in loot containers. It is independent of
+whether the character has read or watched the item. Ambiguous untitled items
+are left unmarked rather than guessing, and the mod does not scan storage or
+containers remotely. This feature has its own native option.
+
 Vehicle Memory remembers where the character last meaningfully encountered a
 vehicle: when entering it, inspecting its mechanics, or leaving it. The World
 Map marker is a last-seen position, never live tracking; driving does not record
@@ -57,8 +65,9 @@ it optional.
 Build 42 exposes Survivor Memory under `Options → Mods`. Every major module can
 be enabled independently: Building Memory, Places That Matter, Emotional
 Memory, Things Worth Remembering, Vehicle Memory, the status indicator, and
-the World Map overlay. Map categories, marker size, emotional reaction
-strength, memorable object types, the recall key, and NeatUI preference can
+the World Map overlay, plus Collected Reading Memory. Map categories, marker
+size, emotional reaction strength, memorable object types, the recall key,
+and NeatUI preference can
 also be configured. Optional vanilla loot-respawn awareness warns when a
 searched memory may be outdated, then refreshes search progress only after the
 survivor actually encounters a container that the game confirms was restocked.

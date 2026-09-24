@@ -6,7 +6,7 @@
 4. Un nouveau processus B42 sélectionne cette save et contrôle le player
    modData après `OnGameStart`.
 
-Attendu actuellement : schéma v10, un bâtiment, deux visites, deux rooms, deux containers
+Attendu actuellement : schéma v11, un bâtiment, deux visites, deux rooms, deux containers
 inspectés, timestamps ordonnés, statut `PARTIALLY_SEARCHED` et désignation
 `HOME`. Le souvenir émotionnel et le timestamp de sa réaction doivent également
 être présents. Les souvenirs agrégés des vrais générateurs intérieur et
@@ -17,6 +17,8 @@ La boîte de clous sélectionnée doit conserver son type, sa quantité et sa cl
 de texture. Le store séparé du fixture sous-sol (conservé uniquement dans le
 `debug` du profil de test) doit garder un alias, un bâtiment canonique, une
 visite et les deux snapshots historiques après rechargement réel.
+Le titre du livre réellement pris dans l'inventaire doit aussi rester marqué
+« déjà récupéré » après rechargement, y compris sur un autre exemplaire.
 
 Exécution historique du 1er septembre 2026 (schéma v6) sur B42.20.4: **PASS** avec NeatUI puis avec le
 fallback vanilla, dans un second processus pour chaque variante. Le personnage
@@ -45,3 +47,10 @@ réussis avec NeatUI et vanilla. Le smoke vérifie que seules les catégories
 des deux pièces effectivement traversées sont conservées, puis confirme leur
 persistance au rechargement. `make test` : 441 assertions lors de la validation
 finale ; la même version runtime a ensuite passé la matrice B42 complète.
+
+Exécution du 24 septembre 2026 (schéma v11) : `make smoke` passe à nouveau la
+matrice complète avec NeatUI et vanilla (`SMOKE MATRIX PASS variants=2`). Une
+prise réelle de livre depuis un conteneur, l'identification d'un second
+exemplaire et la sauvegarde/relecture de sa clé personnelle sont vérifiées.
+`make test` passe 484 assertions déterministes ; `make validate` et
+`make build` passent également.

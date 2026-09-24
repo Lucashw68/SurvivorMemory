@@ -39,6 +39,9 @@ pas imposer les préférences d'un hôte à tous les souvenirs personnels.
   manuelle et les souvenirs dans les tooltips sont masqués quand elle est
   désactivée, sans effacer les observations déjà enregistrées ;
 - `Things Worth Remembering` et `Vehicle Memory` restent indépendants ;
+- `Collected Reading Memory` est indépendante des bâtiments : elle observe
+  uniquement les prises en inventaire ou sac porté. La désactiver masque le
+  signet et suspend les nouvelles observations sans effacer les titres retenus ;
 - le changement de backend NeatUI/vanilla nécessite un redémarrage car les
   classes de fenêtre sont choisies au chargement des Lua client.
 

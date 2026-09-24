@@ -1,4 +1,7 @@
 {
+    "IGUI_SM_OptionsSectionReading": "Подобранные книги и носители",
+    "IGUI_SM_OptionReadingMemory": "Запоминать подобранные книги и носители",
+    "IGUI_SM_OptionReadingMemoryTooltip": "Синяя закладка отмечает книги, журналы, карты, CD и VHS, которые уже попадали в инвентарь или переносимую сумку. Прочтение отмечается отдельно.",
     "IGUI_SM_ItemQuantity": "%1 × %2",
     "IGUI_SM_MoreTooltipEntries": "… ещё записей: %1",
     "IGUI_SM_OptionFadeMarkers": "Приглушать далёкие отметки",

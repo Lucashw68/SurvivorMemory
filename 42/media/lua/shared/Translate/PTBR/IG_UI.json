@@ -1,4 +1,7 @@
 {
+    "IGUI_SM_OptionsSectionReading": "Livros e mídias coletados",
+    "IGUI_SM_OptionReadingMemory": "Lembrar livros e mídias coletados",
+    "IGUI_SM_OptionReadingMemoryTooltip": "Um marcador azul identifica livros, revistas, mapas, CDs e fitas VHS que já passaram pelo seu inventário ou por uma bolsa carregada. O estado de leitura continua separado.",
     "IGUI_SM_ItemQuantity": "%1 × %2",
     "IGUI_SM_MoreTooltipEntries": "… mais %1 registros",
     "IGUI_SM_OptionFadeMarkers": "Atenuar marcadores distantes",

@@ -125,6 +125,7 @@ If Player A searches a house, Player B does not magically inherit that memory. Y
 [*]Personal Home and Outpost designations.
 [*]Rare, fading Emotional Memories from severe experiences.
 [*]Last-seen memories for selected important objects and vehicles.
+[*]Mark books, magazines, maps, CDs and VHS already collected by your character to spot duplicates while looting.
 [*]Broad observed vehicle fuel and condition details, with no live tracking.
 [*]Native Build 42 options for every major feature and map category.
 [/list]

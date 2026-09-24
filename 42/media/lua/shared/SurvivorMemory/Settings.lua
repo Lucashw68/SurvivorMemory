@@ -11,6 +11,7 @@ Settings.DEFAULTS = {
     rememberRooms = true,
     rememberContainers = true,
     itemMemoryEnabled = true,
+    readingMemoryEnabled = true,
     lootRespawnAwareness = true,
     showStatusIndicator = true,
     placesEnabled = true,
@@ -69,6 +70,7 @@ function Settings.enabled(values, feature)
     if feature == "rooms" then return building and bool(values, "rememberRooms") end
     if feature == "containers" then return building and bool(values, "rememberContainers") end
     if feature == "itemMemory" then return building and bool(values, "itemMemoryEnabled") end
+    if feature == "readingMemory" then return bool(values, "readingMemoryEnabled") end
     if feature == "lootRespawnAwareness" then
         return building and bool(values, "rememberContainers")
             and bool(values, "lootRespawnAwareness")

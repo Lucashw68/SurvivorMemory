@@ -1,5 +1,6 @@
 require "SurvivorMemory/ModOptions"
 require "SurvivorMemory/Runtime"
+require "SurvivorMemory/ReadingMemoryIndicator"
 require "SurvivorMemory/MemoryDebugPanel"
 require "SurvivorMemory/MemoryPanel"
 require "SurvivorMemory/MemoryStatusIndicator"

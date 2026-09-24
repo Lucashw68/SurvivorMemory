@@ -18,7 +18,7 @@ same_asset() {
 }
 
 for required in \
-    BuildingIdentity ContainerIdentity MemoryStore TimeFormat VisitSession LocationName StatusPresentation PlaceDesignation EmotionalMemory ImportantMemory VehicleMemory VisibleObservation Settings BuildingMarkerSelection LootRespawnMemory ItemMemory BuildingLinks MapPresentation; do
+    BuildingIdentity ContainerIdentity MemoryStore TimeFormat VisitSession LocationName StatusPresentation PlaceDesignation EmotionalMemory ImportantMemory VehicleMemory VisibleObservation Settings BuildingMarkerSelection LootRespawnMemory ItemMemory BuildingLinks MapPresentation ReadingMemory; do
     [ -f "$root_dir/42/media/lua/shared/SurvivorMemory/$required.lua" ] \
         || fail "module partagé absent: $required"
 done
@@ -30,6 +30,7 @@ done
 [ -f "$root_dir/42/media/lua/client/SurvivorMemory/MemoryStatusIndicator.lua" ] || fail "indicateur mémoire absent"
 [ -f "$root_dir/42/media/lua/client/SurvivorMemory/WorldMapOverlay.lua" ] || fail "overlay World Map absent"
 [ -f "$root_dir/42/media/lua/client/SurvivorMemory/MapTooltip.lua" ] || fail "tooltips carte absents"
+[ -f "$root_dir/42/media/lua/client/SurvivorMemory/ReadingMemoryIndicator.lua" ] || fail "indicateur de livres récupérés absent"
 [ -f "$root_dir/42/media/lua/server/SurvivorMemory/LootRespawnServer.lua" ] || fail "validation serveur du respawn absente"
 [ -f "$root_dir/42/media/ui/SurvivorMemory/memory-status.png" ] || fail "icône mémoire absente"
 [ -f "$root_dir/42/media/ui/SurvivorMemory/map-memory-marker.png" ] || fail "marqueur carte mémoire absent"

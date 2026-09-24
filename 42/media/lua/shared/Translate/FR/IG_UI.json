@@ -1,4 +1,7 @@
 {
+    "IGUI_SM_OptionsSectionReading": "Livres et médias récupérés",
+    "IGUI_SM_OptionReadingMemory": "Mémoriser les livres et médias récupérés",
+    "IGUI_SM_OptionReadingMemoryTooltip": "Un marque-page bleu signale les livres, magazines, cartes, CD et VHS déjà passés dans votre inventaire ou un sac porté. La lecture reste indiquée séparément.",
     "IGUI_SM_ItemQuantity": "%1 × %2",
     "IGUI_SM_MoreTooltipEntries": "… %1 autres entrées",
     "IGUI_SM_OptionFadeMarkers": "Atténuer les marqueurs éloignés",

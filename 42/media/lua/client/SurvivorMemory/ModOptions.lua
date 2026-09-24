@@ -94,6 +94,7 @@ local function refreshDependencies()
 
     setEnabled("preferNeatUI", master)
     setEnabled("buildingMemoryEnabled", master)
+    setEnabled("readingMemoryEnabled", master)
     for _, id in ipairs({ "rememberRooms", "rememberContainers", "showStatusIndicator", "itemMemoryEnabled" }) do
         setEnabled(id, building)
     end
@@ -196,6 +197,10 @@ function ModOptions.register()
         "IGUI_SM_OptionLootRespawnAwarenessTooltip")
     addTick(options, "showStatusIndicator", "IGUI_SM_OptionShowStatusIndicator",
         "IGUI_SM_OptionShowStatusIndicatorTooltip")
+
+    options:addTitle("IGUI_SM_OptionsSectionReading")
+    addTick(options, "readingMemoryEnabled", "IGUI_SM_OptionReadingMemory",
+        "IGUI_SM_OptionReadingMemoryTooltip")
 
     options:addTitle("IGUI_SM_OptionsSectionPlaces")
     addTick(options, "placesEnabled", "IGUI_SM_OptionPlaces", "IGUI_SM_OptionPlacesTooltip")

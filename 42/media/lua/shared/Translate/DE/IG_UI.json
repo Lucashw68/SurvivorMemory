@@ -1,4 +1,7 @@
 {
+    "IGUI_SM_OptionsSectionReading": "Gesammelte Bücher und Medien",
+    "IGUI_SM_OptionReadingMemory": "Gesammelte Bücher und Medien merken",
+    "IGUI_SM_OptionReadingMemoryTooltip": "Ein blaues Lesezeichen markiert Bücher, Zeitschriften, Karten, CDs und VHS-Kassetten, die schon im Inventar oder einer getragenen Tasche waren. Der Lesestatus bleibt davon getrennt.",
     "IGUI_SM_ItemQuantity": "%1 × %2",
     "IGUI_SM_MoreTooltipEntries": "… %1 weitere Einträge",
     "IGUI_SM_OptionFadeMarkers": "Entfernte Markierungen abschwächen",

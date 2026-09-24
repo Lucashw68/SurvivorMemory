@@ -79,7 +79,10 @@ public final class SurvivorMemoryAutoStartAgent {
                     if (!Boolean.TRUE.equals(rawget(locationKinds, iterator.getKey()))) labelsMatch = false;
                 }
             }
-            boolean pass = ((Number) schema).intValue() == 10
+            Object collectedReading = rawget(root, "collectedReading");
+            boolean pass = ((Number) schema).intValue() == 11
+                && collectedReading != null
+                && rawget(collectedReading, "reading1:print:19:Base.BookCarpentry1:0:") != null
                 && labelsMatch
                 && count(basementAliases) == 1
                 && count(rawget(basement, "buildings")) == 1

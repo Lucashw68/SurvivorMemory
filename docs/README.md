@@ -6,7 +6,7 @@ Les investigations et campagnes qui ne décrivent plus l'état courant peuvent
 ## Architecture et APIs B42
 
 - `b42-memory-api-audit.md` : APIs bâtiment, persistance et World Map ;
-- `persistence-and-multiplayer.md` : format v10 et propriété par personnage ;
+- `persistence-and-multiplayer.md` : format v11 et propriété par personnage ;
 - `map-and-basement-memory.md` : atténuation, priorité joueur et sous-sols observés ;
 - `character-memory-semantics.md` : mort, respawn et isolation des souvenirs ;
 - `neatui-audit.md` : intégration optionnelle et fallback vanilla.
@@ -16,6 +16,7 @@ Les investigations et campagnes qui ne décrivent plus l'état courant peuvent
 - `search-completion-semantics.md` : statuts d'exploration ;
 - `location-naming-semantics.md` : classification multi-label des pièces explorées ;
 - `item-memory-contract.md` : choses remarquables et souvenirs d'objets sélectionnés ;
+- `reading-memory.md` : identité et limites du signet « déjà récupéré » ;
 - `roadmap.md` : état livré et suites prudentes.
 
 ## Audits des extensions

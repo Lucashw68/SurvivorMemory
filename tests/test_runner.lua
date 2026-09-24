@@ -57,7 +57,7 @@ truthy(identity.key ~= BuildingIdentity.fromFields(nextHouse).key, "different bu
 equal(BuildingIdentity.fromFields(deepCopy(house)).key, identity.key, "building identity serialization")
 
 local rootData = MemoryStore.migrate(nil)
-equal(rootData.schemaVersion, 10, "new schema version")
+equal(rootData.schemaVersion, 11, "new schema version")
 local memory = MemoryStore.enterBuilding(rootData, identity, 24)
 equal(memory.firstVisited, 24, "first visit")
 equal(memory.lastVisited, 24, "first lastVisited")
@@ -177,7 +177,7 @@ local migratedLoot = MemoryStore.migrate({
         containersKnown = { a = 1 }, containersInspected = { a = 2 }, status = "SEARCHED" } },
     importantMemories = {}, vehicleMemories = {}, debug = {},
 })
-equal(migratedLoot.schemaVersion, 10, "v6 store migrates to v10")
+equal(migratedLoot.schemaVersion, 11, "v6 store migrates to v11")
 equal(migratedLoot.buildings.old.searchCompletedAt, 2,
     "v6 searched building derives its completion timestamp")
 equal(type(migratedLoot.buildings.old.lootRespawnArmed), "table",
@@ -186,7 +186,7 @@ equal(type(migratedLoot.buildings.old.lootRespawnArmed), "table",
 local modData = {}
 local attached = MemoryStore.forModData(modData)
 truthy(attached == modData.SurvivorMemory, "player modData attachment")
-equal(attached.schemaVersion, 10, "player modData migration")
+equal(attached.schemaVersion, 11, "player modData migration")
 
 equal(TimeFormat.age(100, 99), "IGUI_SM_Today", "human time today")
 equal(TimeFormat.age(100, 75), "IGUI_SM_Yesterday", "human time yesterday")
@@ -199,7 +199,7 @@ equal(accepted, false, "unknown persistence version rejected")
 
 local recoveredModData = { SurvivorMemory = { schemaVersion = 999, buildings = {} } }
 local recovered = MemoryStore.forModData(recoveredModData)
-equal(recovered.schemaVersion, 10, "future schema degrades to fresh store")
+equal(recovered.schemaVersion, 11, "future schema degrades to fresh store")
 equal(recoveredModData.SurvivorMemoryRecovery.schemaVersion, 999, "future schema recovery marker")
 
 local partial = MemoryStore.migrate({
@@ -214,7 +214,7 @@ equal(partial.buildings.valid.firstVisited, 12, "partial first timestamp repaire
 equal(type(partial.buildings.valid.roomsKnown), "table", "partial room set repaired")
 equal(partial.buildings.invalid, nil, "unrecoverable building removed")
 equal(type(partial.debug), "table", "corrupted debug counters repaired")
-equal(partial.schemaVersion, 10, "v1 store migrates to current schema")
+equal(partial.schemaVersion, 11, "v1 store migrates to current schema")
 equal(partial.buildings.valid.placeDesignation, PlaceDesignation.NONE, "v1 building migrates to no designation")
 
 local corruptDesignation = MemoryStore.migrate({
@@ -268,7 +268,7 @@ local migratedEmotion = MemoryStore.migrate({
     buildings = { emotional = { firstVisited = 1, lastVisited = 2,
         emotionalMemory = { observedAt = 1, safeReturns = 1 } } },
 })
-equal(migratedEmotion.schemaVersion, 10, "v2 store migrates to v10")
+equal(migratedEmotion.schemaVersion, 11, "v2 store migrates to v11")
 equal(migratedEmotion.buildings.emotional.emotionalMemory.safeReturns, 1,
     "valid emotional memory survives migration")
 local corruptEmotion = MemoryStore.migrate({
@@ -310,7 +310,7 @@ local importantReload = MemoryStore.migrate(deepCopy(rootData))
 equal(#ImportantMemory.forBuilding(importantReload, identity.key), 1,
     "important memory survives serialization")
 local migratedImportant = MemoryStore.migrate({ schemaVersion = 3, buildings = {}, debug = {} })
-equal(migratedImportant.schemaVersion, 10, "v3 store migrates to v10")
+equal(migratedImportant.schemaVersion, 11, "v3 store migrates to v11")
 equal(type(migratedImportant.importantMemories), "table", "v4 migration creates important memory collection")
 local corruptImportant = MemoryStore.migrate({
     schemaVersion = 4, buildings = {}, debug = {},
@@ -495,13 +495,13 @@ equal(sanitizedVehicleDetail.vehicleCondition, nil,
 equal(sanitizedVehicleDetail.personal, false,
     "malformed personal vehicle designation degrades safely")
 local migratedVehicles = MemoryStore.migrate({ schemaVersion = 4, buildings = {}, debug = {} })
-equal(migratedVehicles.schemaVersion, 10, "v4 store migrates to v10")
+equal(migratedVehicles.schemaVersion, 11, "v4 store migrates to v11")
 equal(type(migratedVehicles.vehicleMemories), "table", "vehicle migration creates collection")
 local migratedPersonalVehicles = MemoryStore.migrate({
     schemaVersion = 5, buildings = {}, debug = {}, importantMemories = {},
     vehicleMemories = {},
 })
-equal(migratedPersonalVehicles.schemaVersion, 10, "v5 store migrates to v10")
+equal(migratedPersonalVehicles.schemaVersion, 11, "v5 store migrates to v11")
 local corruptVehicles = MemoryStore.migrate({
     schemaVersion = 6, buildings = {}, debug = {}, importantMemories = {},
     vehicleMemories = { bad = { sqlId = "x", observedAt = 1, x = 1, y = 1, z = 0 } },
@@ -591,7 +591,7 @@ local itemRoot = MemoryStore.migrate({ schemaVersion = 7, buildings = {
     [identity.key] = { firstVisited = 1, lastVisited = 2, visitCount = 3 },
 } })
 local itemBuilding = itemRoot.buildings[identity.key]
-equal(itemRoot.schemaVersion, 10, "item migration v7 to v10")
+equal(itemRoot.schemaVersion, 11, "item migration v7 to v11")
 equal(#ItemMemory.all(itemBuilding), 0, "old saves start without invented item memories")
 equal(itemBuilding.visitCount, 3, "item migration preserves visits")
 local itemObservation = {
@@ -639,4 +639,5 @@ assert(loadfile(root .. "/tests/item_memory_runtime.lua"))()(root, equal, truthy
 assert(loadfile(root .. "/tests/map_building_links.lua"))()(root, equal, truthy)
 assert(loadfile(root .. "/tests/map_tooltip.lua"))()(root, equal, truthy)
 assert(loadfile(root .. "/tests/location_names.lua"))()(root, equal, truthy)
+assert(loadfile(root .. "/tests/reading_memory.lua"))()(root, equal, truthy)
 print(string.format("PASS: %d deterministic Survivor Memory assertions", passed))

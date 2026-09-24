@@ -11,6 +11,7 @@ require "SurvivorMemory/VehicleMemory"
 require "SurvivorMemory/VisibleObservation"
 require "SurvivorMemory/ModOptions"
 require "SurvivorMemory/LootRespawnMemory"
+require "SurvivorMemory/ReadingMemory"
 
 SurvivorMemory = SurvivorMemory or {}
 SurvivorMemory.Runtime = SurvivorMemory.Runtime or {}
@@ -29,6 +30,7 @@ local VehicleMemory = SurvivorMemory.VehicleMemory
 local VisibleObservation = SurvivorMemory.VisibleObservation
 local ModOptions = SurvivorMemory.ModOptions
 local LootRespawnMemory = SurvivorMemory.LootRespawnMemory
+local ReadingMemory = SurvivorMemory.ReadingMemory
 local ItemMemory = SurvivorMemory.ItemMemory
 local BuildingLinks = SurvivorMemory.BuildingLinks
 local rootFor, increment, syncPlayer
@@ -85,6 +87,7 @@ local function stateFor(player)
         state.pendingLootRespawnChecks = {}
         state.lootRespawnConfirmed = false
         state.lootRespawnPossible = false
+        state.readingSeeded = false
         Runtime.players[playerNum] = state
     end
     return state
@@ -484,9 +487,13 @@ function Runtime.onPlayerUpdate(player)
     if not player or not player:isLocalPlayer() then return end
     Runtime.counters.playerUpdates = Runtime.counters.playerUpdates + 1
     if not ModOptions.enabled("master") then return end
+    local state = stateFor(player)
+    if ModOptions.enabled("readingMemory") and not state.readingSeeded then
+        state.readingSeeded = true
+        Runtime.observeCarriedReading(player)
+    end
     local square = player:getCurrentSquare()
     if not square then return end
-    local state = stateFor(player)
     local currentVehicle = ModOptions.enabled("vehicleTracking") and player:getVehicle() or nil
     if currentVehicle and state.activeVehicle == nil then
         -- On reload the timed-action enter event has already happened. One observed
@@ -702,20 +709,94 @@ function Runtime.markContainerLooted(player, container)
     return true
 end
 
+local function carriedContainer(player, container)
+    local inventory = player:getInventory()
+    return container == inventory
+        or (container and container:getOutermostContainer() == inventory)
+end
+
+local function rememberCarriedItem(root, item, observedAt)
+    local changed = ReadingMemory.remember(root, item, observedAt)
+    if instanceof(item, "InventoryContainer") then
+        local inventory = item:getInventory()
+        local contents = inventory and inventory:getItems() or nil
+        if contents then
+            for index = 0, contents:size() - 1 do
+                if rememberCarriedItem(root, contents:get(index), observedAt) then changed = true end
+            end
+        end
+    end
+    return changed
+end
+
+-- One bounded scan of the character's own carried items on load or re-enable.
+-- This makes books already held when the mod is added legitimately remembered.
+function Runtime.observeCarriedReading(player)
+    if not ModOptions.enabled("readingMemory") or not player or not player:isLocalPlayer() then return false end
+    local inventory = player:getInventory()
+    local contents = inventory and inventory:getItems() or nil
+    if not contents then return false end
+    local root, changed = rootFor(player), false
+    local now = TimeFormat.worldAgeHours()
+    for index = 0, contents:size() - 1 do
+        if rememberCarriedItem(root, contents:get(index), now) then changed = true end
+    end
+    if changed then
+        increment(root, "readingTitlesCollected")
+        syncPlayer(player, root)
+    end
+    return changed
+end
+
+-- Called only after a completed B42 inventory transfer, including when a bag
+-- with books inside is picked up. Repeated moves remain idempotent.
+function Runtime.observeReadingTransfer(player, source, destination, item)
+    if not ModOptions.enabled("readingMemory") or not player or not player:isLocalPlayer()
+            or not item or not destination or not carriedContainer(player, destination)
+            or not destination:contains(item) then return false end
+    local root = rootFor(player)
+    if not rememberCarriedItem(root, item, TimeFormat.worldAgeHours()) then return false end
+    increment(root, "readingTitlesCollected")
+    syncPlayer(player, root)
+    return true
+end
+
+function Runtime.hasCollectedReadingItem(player, item)
+    if not ModOptions.enabled("readingMemory") or not player or not item then return false end
+    local data = player:getModData()
+    return ReadingMemory.has(data and data[MemoryStore.MOD_DATA_KEY], item)
+end
+
 function Runtime.installTransferHooks()
     if Runtime.transferHooksInstalled then return end
     require "TimedActions/ISInventoryTransferAction"
     if not ISInventoryTransferAction or not ISInventoryTransferAction.perform then return end
+    local originalTransfer = ISInventoryTransferAction.transferItem
+    ISInventoryTransferAction.transferItem = function(self, item)
+        local source, destination, character = self.srcContainer, self.destContainer, self.character
+        local result = originalTransfer(self, item)
+        Runtime.observeReadingTransfer(character, source, destination, self.item or item)
+        return result
+    end
     local originalPerform = ISInventoryTransferAction.perform
     ISInventoryTransferAction.perform = function(self)
-        local source = self.srcContainer
-        local character = self.character
+        local source, destination, character = self.srcContainer, self.destContainer, self.character
+        local queued = self.queueList and self.queueList[1] and self.queueList[1].items or nil
+        local candidates = {}
+        if queued then
+            for _, item in ipairs(queued) do candidates[#candidates + 1] = item end
+        elseif self.item then
+            candidates[1] = self.item
+        end
         local result = originalPerform(self)
         if source and character then Runtime.markContainerLooted(character, source) end
+        for _, item in ipairs(candidates) do
+            Runtime.observeReadingTransfer(character, source, destination, item)
+        end
         return result
     end
     Runtime.transferHooksInstalled = true
-    print("[SurvivorMemory] B42 loot-respawn transfer hook installed")
+    print("[SurvivorMemory] B42 inventory transfer observation hooks installed")
 end
 
 function Runtime.mayHaveLootRespawned(memory)

@@ -9,6 +9,7 @@ require "SurvivorMemory/VehicleMemory"
 require "SurvivorMemory/LootRespawnMemory"
 require "SurvivorMemory/ItemMemory"
 require "SurvivorMemory/BuildingLinks"
+require "SurvivorMemory/ReadingMemory"
 
 local MemoryStore = SurvivorMemory.MemoryStore
 local PlaceDesignation = SurvivorMemory.PlaceDesignation
@@ -16,7 +17,8 @@ local EmotionalMemory = SurvivorMemory.EmotionalMemory
 local ImportantMemory = SurvivorMemory.ImportantMemory
 local VehicleMemory = SurvivorMemory.VehicleMemory
 local LootRespawnMemory = SurvivorMemory.LootRespawnMemory
-MemoryStore.SCHEMA_VERSION = 10
+local ReadingMemory = SurvivorMemory.ReadingMemory
+MemoryStore.SCHEMA_VERSION = 11
 MemoryStore.MOD_DATA_KEY = "SurvivorMemory"
 MemoryStore.Status = {
     VISITED = "VISITED",
@@ -118,6 +120,11 @@ function MemoryStore.migrate(raw)
         raw.schemaVersion = 10
         version = 10
     end
+    if version == 10 then
+        raw.collectedReading = raw.collectedReading or {}
+        raw.schemaVersion = 11
+        version = 11
+    end
     if version ~= MemoryStore.SCHEMA_VERSION then
         error("Unsupported Survivor Memory schema: " .. tostring(version))
     end
@@ -132,6 +139,7 @@ function MemoryStore.migrate(raw)
     if type(raw.vehicleMemories) ~= "table" then raw.vehicleMemories = {} end
     if type(raw.buildingAliases) ~= "table" then raw.buildingAliases = {} end
     if type(raw.linkedBuildingHistory) ~= "table" then raw.linkedBuildingHistory = {} end
+    ReadingMemory.initialize(raw)
     for key, target in pairs(raw.buildingAliases) do
         if type(key) ~= "string" or type(target) ~= "string" or key == target then
             raw.buildingAliases[key] = nil

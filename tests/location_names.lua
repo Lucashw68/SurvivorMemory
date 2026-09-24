@@ -43,7 +43,7 @@ return function(rootPath, equal, truthy)
     } } }
     local migrated = M.migrate(copy(old))
     local restored = migrated.buildings[id.key]
-    equal(migrated.schemaVersion, 10, "v9 migrates to observed multi-label schema")
+    equal(migrated.schemaVersion, 11, "v9 migrates to observed multi-label schema")
     equal(L.text(restored), L.text(memory), "migration reconstructs labels only from remembered r1 rooms")
     equal(restored.locationKind, "HOUSE", "legacy classification retained but no longer displayed")
     equal(restored.visitCount, 7, "migration preserves visits")

@@ -1,4 +1,7 @@
 {
+    "IGUI_SM_OptionsSectionReading": "Collected books & media",
+    "IGUI_SM_OptionReadingMemory": "Remember collected books & media",
+    "IGUI_SM_OptionReadingMemoryTooltip": "A blue bookmark marks books, magazines, maps, CDs and VHS previously taken into your inventory or a carried bag. Reading status remains separate.",
     "IGUI_SM_ItemQuantity": "%1 × %2",
     "IGUI_SM_MoreTooltipEntries": "… %1 more entries",
     "IGUI_SM_OptionFadeMarkers": "Fade distant markers",

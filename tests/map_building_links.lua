@@ -37,7 +37,7 @@ return function(rootPath, equal, truthy)
     equal(L.isBasementPassage(bad, down), false, "vehicle movement cannot group buildings")
 
     local root = M.migrate({ schemaVersion = 8 })
-    equal(root.schemaVersion, 10, "v8 migrates to observed building links and location labels")
+    equal(root.schemaVersion, 11, "v8 migrates to observed building links and location labels")
     local home = M.enterBuilding(root, upper, 10)
     local cellar = M.enterBuilding(root, lower, 5)
     M.enterBuilding(root, lower, 20)

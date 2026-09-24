@@ -406,6 +406,25 @@ Introduit dans le format v8, repris dans le v9 avec les sous-sols ; option
 native dédiée, aucune indexation automatique
 du loot ordinaire. Voir le [contrat](item-memory-contract.md).
 
+## Mémoire des lectures récupérées
+
+Implémentation locale : un titre de livre, magazine, carte, CD ou VHS devient
+« déjà récupéré » dès son entrée dans l'inventaire personnel ou un sac porté.
+Un petit signet bleu le distingue ensuite dans l'interface de loot, sans
+modifier le témoin vanilla « déjà lu ». L'identité des titres ambigus n'est
+pas devinée ; seuls les objets portés sont parcourus une fois au chargement.
+Les conteneurs du monde et les bases ne sont pas scannés. Option native dédiée,
+mémoire personnelle versionnée v11. Validation réelle B42 à consigner dans
+[le contrat](reading-memory.md).
+
+## Backlog produit
+
+- **Moodle des Outposts :** corriger le moodle de mémoire qui reste affiché dans
+  un Outpost entièrement fouillé. Le comportement attendu suit la règle
+  existante : HOME/OUTPOST conserve son souvenir et son marqueur, mais masque
+  l'indicateur contextuel au statut `SEARCHED`. Ajouter une régression pour
+  vérifier le cas en jeu.
+
 ## Future / Deferred
 
 ### Shared Memories
